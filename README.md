@@ -14,7 +14,6 @@
 | Arthur Felipe Bach Biancolini (Tuizones) |
 | Emanuel Riceto da Silva (emanuelriceto) |
 | Frederico Virmond Fruet (fredfruet) |
-| Pedro Alessandrini Braiti (pedrobraiti) |
 
 ---
 

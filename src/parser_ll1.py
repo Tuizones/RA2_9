@@ -7,11 +7,16 @@
 # Disciplina: Linguagens Formais e Compiladores
 # Professor: Frank Coelho de Alcantara
 
-# Analisador sintático LL(1) — definição da gramática.
+# Analisador sintático LL(1) — parser com pilha e saídas de derivação.
 #
-# Neste commit: construirGramatica() com cálculo de FIRST, FOLLOW e tabela LL(1).
-# O parser com pilha (parsear) e a construção da AST (gerarArvore)
-# serão adicionados nos próximos commits.
+# Neste commit adicionamos:
+#   parsear(tokens, gram)              — roda o parser LL(1) com pilha explícita
+#   _descreve(token, terminal)         — formata um token para mensagens de erro
+#   derivacao_para_texto(derivacao)    — lista numerada das produções aplicadas
+#   derivacao_para_texto_tabela(...)   — tabela markdown passo a passo
+#
+# A função gerarArvore (que constrói a AST semântica) será adicionada
+# pelo Arthur no próximo commit.
 
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ from .lexer_fsm import (
 
 
 # --------------------------------------------------------------
-# Símbolos terminais (vocabulário do parser)
+# Símbolos terminais
 # --------------------------------------------------------------
 
 T_LPAREN = "LPAREN"
@@ -43,12 +48,10 @@ T_WHILE = "WHILE"
 T_IFELSE = "IFELSE"
 T_EOF = "$"
 
-# operadores binários aceitos em (A B op)
 BINOPS = {"+", "-", "*", "/", "|", "%", "^", ">", "<", "==", "!=", ">=", "<="}
 
 
 def _token_para_terminal(token: Token) -> str:
-    """Converte um Token do lexer no terminal equivalente na gramática."""
     if token.tipo == TIPO_ABRE:
         return T_LPAREN
     if token.tipo == TIPO_FECHA:
@@ -75,53 +78,33 @@ def _token_para_terminal(token: Token) -> str:
     raise Erros(f"Token não mapeado para terminal: {token.tipo}:{token.valor}")
 
 
-# --------------------------------------------------------------
-# Gramática como lista de produções
-# --------------------------------------------------------------
 EPSILON = "ε"
 
 
 def _definicao_gramatica() -> list[tuple[str, list[str]]]:
     producoes: list[tuple[str, list[str]]] = []
-
-    # 0: ponto de entrada do programa
     producoes.append(("program", [T_LPAREN, T_START, T_RPAREN, "body"]))
-    # 1: body sempre começa consumindo o LPAREN (fatoração à esquerda)
     producoes.append(("body", [T_LPAREN, "body_tail"]))
-    # 2,3: body_tail decide se encontramos o END ou mais um statement
     producoes.append(("body_tail", [T_END, T_RPAREN]))
     producoes.append(("body_tail", ["expr_body", T_RPAREN, "body"]))
-    # 4: toda expressão é um item seguido de resto
     producoes.append(("expr_body", ["item", "rest1"]))
-    # 5,6: rest1
-    producoes.append(("rest1", []))  # ε
+    producoes.append(("rest1", []))
     producoes.append(("rest1", ["item", "rest2"]))
-    # 7-10: rest2
-    producoes.append(("rest2", []))  # ε
+    producoes.append(("rest2", []))
     producoes.append(("rest2", ["binop"]))
     producoes.append(("rest2", ["kw_ctrl3"]))
     producoes.append(("rest2", ["item", "item_tail"]))
-    # 11: item_tail
     producoes.append(("item_tail", ["kw_ctrl4"]))
-    # 12-15: os tipos possíveis de item
     producoes.append(("item", [T_NUMERO]))
     producoes.append(("item", [T_IDENT]))
     producoes.append(("item", [T_RES]))
     producoes.append(("item", [T_LPAREN, "expr_body", T_RPAREN]))
-    # uma produção por operador binário
     for op in ("+", "-", "*", "/", "|", "%", "^", ">", "<", "==", "!=", ">=", "<="):
         producoes.append(("binop", [op]))
-    # palavras-chave de controle
     producoes.append(("kw_ctrl3", [T_IF]))
     producoes.append(("kw_ctrl3", [T_WHILE]))
     producoes.append(("kw_ctrl4", [T_IFELSE]))
-
     return producoes
-
-
-# --------------------------------------------------------------
-# FIRST / FOLLOW
-# --------------------------------------------------------------
 
 
 def _eh_terminal(simbolo: str, nao_terminais: set[str]) -> bool:
@@ -133,7 +116,6 @@ def _calcular_first(
     nao_terminais: set[str],
 ) -> dict[str, set[str]]:
     first: dict[str, set[str]] = {nt: set() for nt in nao_terminais}
-
     mudou = True
     while mudou:
         mudou = False
@@ -143,7 +125,6 @@ def _calcular_first(
                     first[lhs].add(EPSILON)
                     mudou = True
                 continue
-
             anulavel = True
             for sim in rhs:
                 if _eh_terminal(sim, nao_terminais):
@@ -171,7 +152,6 @@ def _first_de_sequencia(
     first: dict[str, set[str]],
     nao_terminais: set[str],
 ) -> set[str]:
-    """FIRST de uma cadeia de símbolos."""
     resultado: set[str] = set()
     if not seq:
         resultado.add(EPSILON)
@@ -195,7 +175,6 @@ def _calcular_follow(
 ) -> dict[str, set[str]]:
     follow: dict[str, set[str]] = {nt: set() for nt in nao_terminais}
     follow[inicial].add(T_EOF)
-
     mudou = True
     while mudou:
         mudou = False
@@ -222,7 +201,6 @@ def _construir_tabela_ll1(
 ) -> dict[tuple[str, str], int]:
     tabela: dict[tuple[str, str], int] = {}
     conflitos: list[str] = []
-
     for idx, (lhs, rhs) in enumerate(producoes):
         first_rhs = _first_de_sequencia(rhs, first, nao_terminais)
         for term in first_rhs - {EPSILON}:
@@ -240,21 +218,14 @@ def _construir_tabela_ll1(
                         f"Conflito LL(1) em [{lhs}, {term}]: produções {tabela[chave]} e {idx}"
                     )
                 tabela[chave] = idx
-
     if conflitos:
         raise Erros("Gramática não é LL(1):\n  " + "\n  ".join(conflitos))
     return tabela
 
 
-# --------------------------------------------------------------
-# API pública: construirGramatica
-# --------------------------------------------------------------
-
-
 def construirGramatica() -> dict:
     """Cria as produções, calcula FIRST/FOLLOW e monta a tabela LL(1)."""
     producoes = _definicao_gramatica()
-
     nao_terminais: set[str] = set()
     terminais: set[str] = {T_EOF}
     for lhs, rhs in producoes:
@@ -263,12 +234,10 @@ def construirGramatica() -> dict:
         for sim in rhs:
             if sim not in nao_terminais:
                 terminais.add(sim)
-
     inicial = producoes[0][0]
     first = _calcular_first(producoes, nao_terminais)
     follow = _calcular_follow(producoes, nao_terminais, first, inicial)
     tabela = _construir_tabela_ll1(producoes, nao_terminais, first, follow)
-
     return {
         "producoes": producoes,
         "nao_terminais": nao_terminais,
@@ -278,3 +247,130 @@ def construirGramatica() -> dict:
         "follow": follow,
         "tabela": tabela,
     }
+
+
+# --------------------------------------------------------------
+# Parser LL(1) com pilha
+# --------------------------------------------------------------
+
+
+def parsear(tokens: list[Token], tabela_ll1: dict) -> dict:
+    # Parser LL(1) dirigido por tabela com pilha explícita.
+    # Mantemos uma pilha com o que ainda esperamos ver.
+    # A cada passo:
+    #   - se o topo é terminal e casa com o token atual -> consome
+    #   - se o topo é não-terminal -> consulta a tabela e expande
+    # Cada expansão é registrada em `derivacao` e em `passos`.
+    producoes = tabela_ll1["producoes"]
+    tabela = tabela_ll1["tabela"]
+    inicial = tabela_ll1["inicial"]
+    nao_terminais = tabela_ll1["nao_terminais"]
+
+    entrada: list[tuple[str, Token | None]] = [
+        (_token_para_terminal(tok), tok) for tok in tokens
+    ]
+    entrada.append((T_EOF, None))
+
+    pilha: list[str] = [T_EOF, inicial]
+    derivacao: list[dict] = []
+    passos: list[dict] = []
+    i = 0
+
+    while pilha:
+        pilha_snap = list(pilha)
+        topo = pilha.pop()
+        terminal_atual, token_atual = entrada[i]
+
+        if topo == T_EOF:
+            if terminal_atual == T_EOF:
+                passos.append({"tipo": "casa", "pilha": pilha_snap, "pos": i, "simbolo": T_EOF})
+                break
+            raise Erros(
+                f"Entrada extra após o fim do programa: {_descreve(token_atual, terminal_atual)}"
+            )
+
+        if topo not in nao_terminais:
+            if topo == terminal_atual:
+                passos.append({"tipo": "casa", "pilha": pilha_snap, "pos": i, "simbolo": topo})
+                i += 1
+                continue
+            raise Erros(
+                f"Erro sintático: esperado '{topo}' mas encontrado "
+                f"{_descreve(token_atual, terminal_atual)}"
+            )
+
+        chave = (topo, terminal_atual)
+        if chave not in tabela:
+            raise Erros(
+                f"Erro sintático: não há produção para [{topo}, {terminal_atual}] "
+                f"(token {_descreve(token_atual, terminal_atual)})"
+            )
+        idx = tabela[chave]
+        lhs, rhs = producoes[idx]
+        passos.append({"tipo": "expande", "pilha": pilha_snap, "pos": i,
+                       "idx": idx, "lhs": lhs, "rhs": list(rhs)})
+        derivacao.append({"idx": idx, "lhs": lhs, "rhs": list(rhs), "pos_token": i})
+        for sim in reversed(rhs):
+            pilha.append(sim)
+
+    if i != len(entrada) - 1:
+        terminal_atual, token_atual = entrada[i]
+        raise Erros(
+            f"Erro sintático: tokens extras após o programa "
+            f"({_descreve(token_atual, terminal_atual)})"
+        )
+
+    return {"derivacao": derivacao, "passos": passos, "tokens": tokens}
+
+
+def _descreve(token: Token | None, terminal: str) -> str:
+    if token is None:
+        return f"'$' (fim de entrada, terminal {terminal})"
+    return f"'{token.valor}' (linha {token.linha}, coluna {token.coluna})"
+
+
+# --------------------------------------------------------------
+# Utilitários de apresentação
+# --------------------------------------------------------------
+
+
+def derivacao_para_texto(derivacao: list[dict]) -> str:
+    linhas: list[str] = []
+    for i, passo in enumerate(derivacao, start=1):
+        rhs = " ".join(passo["rhs"]) if passo["rhs"] else "ε"
+        linhas.append(f"{i:03d}. {passo['lhs']} -> {rhs}")
+    return "\n".join(linhas)
+
+
+def derivacao_para_texto_tabela(passos: list[dict], tokens: list[Token]) -> str:
+    MAX_PILHA = 50
+    MAX_ENT   = 40
+
+    def _pilha_str(snap: list[str]) -> str:
+        s = " ".join(reversed(snap))
+        return s if len(s) <= MAX_PILHA else s[:MAX_PILHA - 1] + "…"
+
+    def _ent_str(pos: int) -> str:
+        vals = [t.valor for t in tokens[pos:pos + 10]]
+        if pos + 10 < len(tokens):
+            vals.append("…")
+        if not vals:
+            vals = ["$"]
+        s = " ".join(vals)
+        return s if len(s) <= MAX_ENT else s[:MAX_ENT - 1] + "…"
+
+    linhas: list[str] = []
+    linhas.append("# Derivação LL(1) — Passo a Passo")
+    linhas.append("")
+    linhas.append("| Passo | Pilha (topo →) | Entrada (→) | Ação |")
+    linhas.append("|------:|---|---|---|")
+    for n, p in enumerate(passos, start=1):
+        pilha_s = _pilha_str(p["pilha"])
+        ent_s   = _ent_str(p["pos"])
+        if p["tipo"] == "expande":
+            rhs = " ".join(p["rhs"]) if p["rhs"] else "ε"
+            acao = f"Expande: `{p['lhs']}` → `{rhs}`"
+        else:
+            acao = f"Casa: `{p['simbolo']}`"
+        linhas.append(f"| {n} | `{pilha_s}` | `{ent_s}` | {acao} |")
+    return "\n".join(linhas)

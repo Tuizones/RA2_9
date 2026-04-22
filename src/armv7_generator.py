@@ -2,7 +2,6 @@
 #   Arthur Felipe Bach Biancolini (Tuizones)
 #   Emanuel Riceto da Silva (emanuelriceto)
 #   Frederico Virmond Fruet (fredfruet)
-#   Pedro Alessandrini Braiti (pedrobraiti)
 # Grupo Canvas: RA1 18
 # Instituição: Pontifícia Universidade Católica do Paraná
 # Disciplina: Linguagens Formais e Compiladores

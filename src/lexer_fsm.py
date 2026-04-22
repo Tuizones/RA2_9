@@ -2,38 +2,43 @@
 #   Arthur Felipe Bach Biancolini (Tuizones)
 #   Emanuel Riceto da Silva (emanuelriceto)
 #   Frederico Virmond Fruet (fredfruet)
-#   Pedro Alessandrini Braiti (pedrobraiti)
-# Grupo Canvas: RA1 18
+# Grupo Canvas: RA2 9
 # Instituição: Pontifícia Universidade Católica do Paraná
 # Disciplina: Linguagens Formais e Compiladores
 # Professor: Frank Coelho de Alcantara
 
-# Analisador léxico usando AFD (autômato finito determinístico).
-# Implementado só com funções de estado, sem usar regex.
-# Cada estado do autômato é uma função que recebe um caractere e decide
-# pra qual estado ir.
+# Analisador léxico implementado como um AFD (autômato finito determinístico).
+# Não usamos regex — cada estado é uma função Python que decide a transição.
 #
-# Estados: inicial, numero, numero_decimal, identificador, barra
+# Atualizamos o léxico da Fase 1 para suportar:
+#   `/`  = divisão inteira  
+#   `|`  = divisão real      
+#   `%`  = resto da divisão
+#   `^`  = potenciação
+#   `+ - *` = os aritméticos de sempre
+#   Relacionais: `>`, `<`, `==`, `!=`, `>=`, `<=`
+#   Palavras reservadas novas: START, END, IF, IFELSE, WHILE (além do RES da Fase 1)
 #
-# Tokens: NUMERO, OPERADOR (+,-,*,/,//,%,^), PARENTESE_ABRE,
-#         PARENTESE_FECHA, IDENTIFICADOR (nomes de memória), KEYWORD (RES)
-#
-# O diagrama do AFD ta no README
+# Os estados do AFD são:
+#   inicial, numero, numero_decimal, identificador,
+#   igual, diferente, maior, menor
 
 from dataclasses import dataclass
+
 
 class Erros(Exception):
     pass
 
+
 @dataclass
 class Token:
-    """Um token com tipo, valor e posição na linha."""
+    """Um token com tipo, valor e posição."""
     tipo: str
     valor: str
     linha: int
     coluna: int
 
-# Tipos de token
+
 TIPO_NUMERO = "NUMERO"
 TIPO_OPERADOR = "OPERADOR"
 TIPO_ABRE = "PARENTESE_ABRE"
@@ -41,30 +46,35 @@ TIPO_FECHA = "PARENTESE_FECHA"
 TIPO_IDENT = "IDENTIFICADOR"
 TIPO_KEYWORD = "KEYWORD"
 
-# Funções auxiliares pra classificar caracteres 
+# Palavras reservadas — quando o estado `identificador` fechar um token,
+# verificamos se o valor está aqui; se estiver, vira KEYWORD em vez de IDENT.
+PALAVRAS_RESERVADAS = {"RES", "START", "END", "IF", "IFELSE", "WHILE"}
+
 
 def _eh_digito(char: str) -> bool:
     return "0" <= char <= "9"
 
+
 def _eh_maiuscula(char: str) -> bool:
     return "A" <= char <= "Z"
+
 
 def _eh_minuscula(char: str) -> bool:
     return "a" <= char <= "z"
 
+
 def _adicionar_token(contexto: dict, tipo: str, valor: str) -> None:
-    """Cria um Token e joga na lista."""
     contexto["tokens"].append(
-        Token(tipo=tipo, valor=valor, linha=contexto["linha"], coluna=contexto["inicio_token"] + 1)
+        Token(
+            tipo=tipo,
+            valor=valor,
+            linha=contexto["linha"],
+            coluna=contexto["inicio_token"] + 1,
+        )
     )
 
 
-# Cada função recebe (caractere, contexto) e retorna (proximo_estado, avancar_cursor).
-# Quando avancar=False o caractere é reprocessado no próximo estado.
-
 def estado_inicial(char: str, contexto: dict) -> tuple[str, bool]:
-    """Classifica o caractere e decide pra qual estado ir."""
-    # ignora espaços
     if char in (" ", "\t", "\r", "\n"):
         return "inicial", True
 
@@ -82,152 +92,162 @@ def estado_inicial(char: str, contexto: dict) -> tuple[str, bool]:
         _adicionar_token(contexto, TIPO_FECHA, ")")
         return "inicial", True
 
-    # digito -> vai pro estado numero
     if _eh_digito(char):
         contexto["buffer"] = char
         contexto["inicio_token"] = contexto["i"]
         return "numero", True
 
-    # letra maiuscula -> identificador (MEM, RES, etc)
     if _eh_maiuscula(char):
         contexto["buffer"] = char
         contexto["inicio_token"] = contexto["i"]
         return "identificador", True
 
-    # operadores simples
-    if char in "+-*%^":
+    if char in "+-*/|%^":
         contexto["inicio_token"] = contexto["i"]
         _adicionar_token(contexto, TIPO_OPERADOR, char)
         return "inicial", True
 
-    # barra: pode ser / ou //
-    if char == "/":
-        contexto["buffer"] = "/"
+    if char == "=":
         contexto["inicio_token"] = contexto["i"]
-        return "barra", True
+        return "igual", True
+    if char == "!":
+        contexto["inicio_token"] = contexto["i"]
+        return "diferente", True
+    if char == ">":
+        contexto["inicio_token"] = contexto["i"]
+        return "maior", True
+    if char == "<":
+        contexto["inicio_token"] = contexto["i"]
+        return "menor", True
 
-    # ponto solto sem digito antes (tipo .5)
     if char == ".":
         raise Erros(
-            f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: número malformado — ponto sem dígito antes"
+            f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
+            f"número malformado — ponto sem dígito antes"
         )
 
-    # minuscula nao pode
     if _eh_minuscula(char):
         raise Erros(
-            f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: identificadores devem usar apenas letras maiúsculas, encontrado '{char}'"
+            f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
+            f"identificadores devem usar apenas letras maiúsculas, encontrado '{char}'"
         )
 
-    # caractere invalido
-    raise Erros(f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: caractere inválido '{char}'")
+    raise Erros(
+        f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: caractere inválido '{char}'"
+    )
 
 
 def estado_numero(char: str, contexto: dict) -> tuple[str, bool]:
-    """Acumula dígitos. Se encontrar ponto vai pra decimal."""
-    # mais digitos
     if _eh_digito(char):
         contexto["buffer"] += char
         return "numero", True
 
-    # achou ponto, vira decimal
     if char == ".":
         contexto["buffer"] += char
         return "numero_decimal", True
 
-    # letra grudada no numero = erro
     if _eh_maiuscula(char) or _eh_minuscula(char):
         raise Erros(
             f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
-            f"número malformado '{contexto['buffer'] + char}' — letra imediatamente após número"
+            f"número malformado '{contexto['buffer'] + char}' — letra após número"
         )
 
-    # qualquer outra coisa: emite o numero e reprocessa o char
     _adicionar_token(contexto, TIPO_NUMERO, contexto["buffer"])
     contexto["buffer"] = ""
     return "inicial", False
 
 
 def estado_numero_decimal(char: str, contexto: dict) -> tuple[str, bool]:
-    """Acumula dígitos da parte decimal (após o ponto)."""
     if _eh_digito(char):
         contexto["buffer"] += char
         return "numero_decimal", True
 
-    # dois pontos (tipo 3.14.5)
     if char == ".":
         raise Erros(
             f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
             f"número malformado '{contexto['buffer'] + char}' — múltiplos pontos decimais"
         )
 
-    # ponto sem nada depois (tipo 3.)
     if contexto["buffer"].endswith("."):
         raise Erros(
             f"Linha {contexto['linha']}, coluna {contexto['i']}: "
-            f"número malformado '{contexto['buffer']}' — ponto decimal sem dígitos depois"
+            f"número malformado '{contexto['buffer']}' — ponto sem dígitos depois"
         )
 
-    # letra grudada (tipo 2.0a)
     if _eh_maiuscula(char) or _eh_minuscula(char):
         raise Erros(
             f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
-            f"número malformado '{contexto['buffer'] + char}' — letra imediatamente após número"
+            f"número malformado '{contexto['buffer'] + char}' — letra após número"
         )
 
-    # numero completo, emite e volta
     _adicionar_token(contexto, TIPO_NUMERO, contexto["buffer"])
     contexto["buffer"] = ""
     return "inicial", False
 
 
 def estado_identificador(char: str, contexto: dict) -> tuple[str, bool]:
-    """Acumula letras maiúsculas. Diferencia RES (keyword) de nomes de memória."""
     if _eh_maiuscula(char):
         contexto["buffer"] += char
         return "identificador", True
 
-    # minuscula misturada = erro
     if _eh_minuscula(char):
         raise Erros(
             f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
-            f"identificador '{contexto['buffer'] + char}' contém letra minúscula — use apenas maiúsculas"
+            f"identificador '{contexto['buffer'] + char}' contém letra minúscula"
         )
 
-    # numero no identificador = erro
     if _eh_digito(char):
         raise Erros(
             f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
-            f"identificador '{contexto['buffer'] + char}' contém dígito — use apenas letras maiúsculas"
+            f"identificador '{contexto['buffer'] + char}' contém dígito"
         )
 
-    # terminou: se for "RES" é keyword, senão é nome de memória
     valor = contexto["buffer"]
-    if valor == "RES":
+    if valor in PALAVRAS_RESERVADAS:
         _adicionar_token(contexto, TIPO_KEYWORD, valor)
     else:
         _adicionar_token(contexto, TIPO_IDENT, valor)
-
     contexto["buffer"] = ""
     return "inicial", False
 
 
-def estado_barra(char: str, contexto: dict) -> tuple[str, bool]:
-    """Diferencia / (divisão real) de // (divisão inteira)."""
-    # segunda barra -> //
-    if char == "/":
-        _adicionar_token(contexto, TIPO_OPERADOR, "//")
-        contexto["buffer"] = ""
+def estado_igual(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, "==")
         return "inicial", True
+    raise Erros(
+        f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
+        f"operador inválido '=' isolado (use '==')"
+    )
 
-    # só uma barra -> /
-    _adicionar_token(contexto, TIPO_OPERADOR, "/")
-    contexto["buffer"] = ""
+
+def estado_diferente(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, "!=")
+        return "inicial", True
+    raise Erros(
+        f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
+        f"operador inválido '!' isolado (use '!=')"
+    )
+
+
+def estado_maior(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, ">=")
+        return "inicial", True
+    _adicionar_token(contexto, TIPO_OPERADOR, ">")
+    return "inicial", False
+
+
+def estado_menor(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, "<=")
+        return "inicial", True
+    _adicionar_token(contexto, TIPO_OPERADOR, "<")
     return "inicial", False
 
 
 def _finalizar(contexto: dict, estado: str) -> None:
-    """Emite token pendente no buffer e checa se os parênteses fecharam certo."""
-    # emite o que tiver pendente no buffer
     if estado == "numero":
         _adicionar_token(contexto, TIPO_NUMERO, contexto["buffer"])
     elif estado == "numero_decimal":
@@ -236,23 +256,22 @@ def _finalizar(contexto: dict, estado: str) -> None:
         _adicionar_token(contexto, TIPO_NUMERO, contexto["buffer"])
     elif estado == "identificador":
         valor = contexto["buffer"]
-        if valor == "RES":
+        if valor in PALAVRAS_RESERVADAS:
             _adicionar_token(contexto, TIPO_KEYWORD, valor)
         else:
             _adicionar_token(contexto, TIPO_IDENT, valor)
-    elif estado == "barra":
-        _adicionar_token(contexto, TIPO_OPERADOR, "/")
+    elif estado == "maior":
+        _adicionar_token(contexto, TIPO_OPERADOR, ">")
+    elif estado == "menor":
+        _adicionar_token(contexto, TIPO_OPERADOR, "<")
+    elif estado in ("igual", "diferente"):
+        raise Erros(f"Linha {contexto['linha']}: operador relacional incompleto")
 
-    # checa parenteses
     if contexto["paren"] != 0:
         raise Erros(f"Linha {contexto['linha']}: parênteses desbalanceados")
 
 
 def tokenizar_linha(linha: str, numero_linha: int = 1) -> list[Token]:
-    """Tokeniza uma linha de expressão RPN usando o AFD.
-    Retorna lista de Tokens ou levanta Erros se a entrada for inválida.
-    """
-    # contexto compartilhado entre os estados
     contexto = {
         "tokens": [],
         "buffer": "",
@@ -263,19 +282,18 @@ def tokenizar_linha(linha: str, numero_linha: int = 1) -> list[Token]:
     }
 
     estado = "inicial"
-
-    # mapeia nome do estado -> função
     maquina = {
         "inicial": estado_inicial,
         "numero": estado_numero,
         "numero_decimal": estado_numero_decimal,
         "identificador": estado_identificador,
-        "barra": estado_barra,
+        "igual": estado_igual,
+        "diferente": estado_diferente,
+        "maior": estado_maior,
+        "menor": estado_menor,
     }
 
-    # coloca \n no final pra garantir que o ultimo token seja emitido
     chars = linha + "\n"
-    # loop principal: consome caractere a caractere
     while contexto["i"] < len(chars):
         char = chars[contexto["i"]]
         proximo_estado, avancar = maquina[estado](char, contexto)
@@ -285,3 +303,11 @@ def tokenizar_linha(linha: str, numero_linha: int = 1) -> list[Token]:
 
     _finalizar(contexto, estado)
     return contexto["tokens"]
+
+
+def tokenizar_programa(linhas: list[str]) -> list[Token]:
+    """Tokeniza todas as linhas preservando a numeração de linha."""
+    todos: list[Token] = []
+    for idx, linha in enumerate(linhas, start=1):
+        todos.extend(tokenizar_linha(linha, numero_linha=idx))
+    return todos

@@ -11,8 +11,8 @@
 # Não usamos regex — cada estado é uma função Python que decide a transição.
 #
 # Atualizamos o léxico da Fase 1 para suportar:
-#   `/`  = divisão inteira  
-#   `|`  = divisão real      
+#   `/`  = divisão inteira   (mudamos de `//` para `/` pra ficar mais limpo)
+#   `|`  = divisão real      (usamos `|` porque `/` já foi tomado)
 #   `%`  = resto da divisão
 #   `^`  = potenciação
 #   `+ - *` = os aritméticos de sempre
@@ -74,6 +74,13 @@ def _adicionar_token(contexto: dict, tipo: str, valor: str) -> None:
     )
 
 
+# ---- Estados do AFD ----
+# Cada função recebe o caractere atual e o contexto compartilhado,
+# e retorna (próximo_estado, consumiu_char).
+# Quando consumiu_char = False, o mesmo char vai ser reprocessado no
+# novo estado (transição sem consumo = ε-transição implícita).
+
+
 def estado_inicial(char: str, contexto: dict) -> tuple[str, bool]:
     if char in (" ", "\t", "\r", "\n"):
         return "inicial", True
@@ -81,7 +88,7 @@ def estado_inicial(char: str, contexto: dict) -> tuple[str, bool]:
     if char == "(":
         contexto["inicio_token"] = contexto["i"]
         _adicionar_token(contexto, TIPO_ABRE, "(")
-        contexto["paren"] += 1
+        contexto["paren"] += 1   # conta abertura para verificar balanceamento
         return "inicial", True
 
     if char == ")":
@@ -102,11 +109,14 @@ def estado_inicial(char: str, contexto: dict) -> tuple[str, bool]:
         contexto["inicio_token"] = contexto["i"]
         return "identificador", True
 
+    # operadores aritméticos de um caractere
     if char in "+-*/|%^":
         contexto["inicio_token"] = contexto["i"]
         _adicionar_token(contexto, TIPO_OPERADOR, char)
         return "inicial", True
 
+    # relacionais de dois caracteres precisam de estado intermediário
+    # porque precisamos olhar o próximo char antes de emitir o token
     if char == "=":
         contexto["inicio_token"] = contexto["i"]
         return "igual", True
@@ -186,6 +196,7 @@ def estado_numero_decimal(char: str, contexto: dict) -> tuple[str, bool]:
 
 
 def estado_identificador(char: str, contexto: dict) -> tuple[str, bool]:
+    # só letras maiúsculas são permitidas nos identificadores da linguagem
     if _eh_maiuscula(char):
         contexto["buffer"] += char
         return "identificador", True
@@ -203,6 +214,7 @@ def estado_identificador(char: str, contexto: dict) -> tuple[str, bool]:
         )
 
     valor = contexto["buffer"]
+    # aqui decidimos se é palavra reservada ou identificador de memória
     if valor in PALAVRAS_RESERVADAS:
         _adicionar_token(contexto, TIPO_KEYWORD, valor)
     else:
@@ -232,6 +244,7 @@ def estado_diferente(char: str, contexto: dict) -> tuple[str, bool]:
 
 
 def estado_maior(char: str, contexto: dict) -> tuple[str, bool]:
+    # se o próximo char for '=', emite '>=' ; senão emite '>' e reprocessa
     if char == "=":
         _adicionar_token(contexto, TIPO_OPERADOR, ">=")
         return "inicial", True
@@ -240,6 +253,7 @@ def estado_maior(char: str, contexto: dict) -> tuple[str, bool]:
 
 
 def estado_menor(char: str, contexto: dict) -> tuple[str, bool]:
+    # mesma lógica do maior
     if char == "=":
         _adicionar_token(contexto, TIPO_OPERADOR, "<=")
         return "inicial", True
@@ -272,6 +286,9 @@ def _finalizar(contexto: dict, estado: str) -> None:
 
 
 def tokenizar_linha(linha: str, numero_linha: int = 1) -> list[Token]:
+    # Roda o AFD caractere por caractere.
+    # Adicionamos '\n' ao final para forçar o fechamento do último token
+    # (ex.: número ou identificador que encosta no final da string).
     contexto = {
         "tokens": [],
         "buffer": "",
@@ -282,6 +299,7 @@ def tokenizar_linha(linha: str, numero_linha: int = 1) -> list[Token]:
     }
 
     estado = "inicial"
+    # mapeamos os nomes de estado para as funções correspondentes
     maquina = {
         "inicial": estado_inicial,
         "numero": estado_numero,

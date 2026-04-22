@@ -65,6 +65,12 @@ def _coletar_memorias(no: dict, memorias: set[str]) -> None:
         return
 
 
+# ---- Utilitários de pilha ----
+# Como o ARMv7 não tem instrução de push/pop para registradores VFP,
+# usamos r4/r5 como intermediários: VMOV move os 64 bits de d0 para r4:r5
+# e então PUSH coloca eles na pilha de memória.
+
+
 def _emit_push_d0(linhas: list[str]) -> None:
     linhas.append("    VMOV r4, r5, d0")
     linhas.append("    PUSH {r4, r5}")
@@ -76,14 +82,20 @@ def _emit_pop_para_d(linhas: list[str], reg_d: str) -> None:
 
 
 def _novo_rotulo(ctx: dict, base: str) -> str:
+    # gera rótulos únicos incrementando um contador global do contexto
     ctx["contador_rotulos"] += 1
     return f"L_{base}_{ctx['contador_rotulos']}"
 
 
+# ---- Emissão recursiva de expressões ----
+
+
 def _emit_expressao(no: dict, linhas: list[str], ctx: dict) -> None:
+    # Despacha para a função correta de acordo com o tipo do nó da AST.
     tipo = no["tipo"]
 
     if tipo == "number":
+        # constante numérica: guardamos no segmento .data e carregamos via LDR
         valor = no["valor"]
         mapa = ctx["constantes"]
         if valor not in mapa:
@@ -105,6 +117,7 @@ def _emit_expressao(no: dict, linhas: list[str], ctx: dict) -> None:
         return
 
     if tipo == "res_ref":
+        # (N RES) -> acessa o resultado que ficou salvo N linhas antes
         alvo = ctx["indice_linha"] - no["linhas_atras"]
         if alvo < 0:
             alvo = 0
@@ -140,6 +153,8 @@ def _emit_expressao(no: dict, linhas: list[str], ctx: dict) -> None:
 
 
 def _emit_binario(no: dict, linhas: list[str], ctx: dict) -> None:
+    # avalia esq e dir (resultados ficam na pilha),
+    # depois desempilha para d1 (dir) e d0 (esq) e aplica o operador
     _emit_expressao(no["esq"], linhas, ctx)
     _emit_expressao(no["dir"], linhas, ctx)
     _emit_pop_para_d(linhas, "d1")
@@ -154,9 +169,9 @@ def _emit_binario(no: dict, linhas: list[str], ctx: dict) -> None:
     elif op == "*":
         linhas.append("    VMUL.F64 d0, d0, d1")
     elif op == "|":
-        linhas.append("    VDIV.F64 d0, d0, d1")
+        linhas.append("    VDIV.F64 d0, d0, d1")  # divisão real
     elif op == "/":
-        linhas.append("    BL __op_idiv")
+        linhas.append("    BL __op_idiv")         # divisão inteira
     elif op == "%":
         linhas.append("    BL __op_mod")
     elif op == "^":
@@ -170,12 +185,17 @@ def _emit_binario(no: dict, linhas: list[str], ctx: dict) -> None:
 
 
 def _emit_comparacao(op: str, linhas: list[str], ctx: dict) -> None:
+    # VCMP.F64 compara d0 e d1 e atualiza o FPSCR.
+    # VMRS transfere as flags do FPSCR para os flags ARM (APSR_nzcv),
+    # permitindo usar os desvios condicionais normais (BGT, BLT, etc.).
+    # Resultado: d0 recebe 1.0 se verdadeiro, 0.0 se falso.
     linhas.append("    VCMP.F64 d0, d1")
     linhas.append("    VMRS APSR_nzcv, FPSCR")
 
     rotulo_true = _novo_rotulo(ctx, "cmp_t")
     rotulo_end = _novo_rotulo(ctx, "cmp_e")
 
+    # escolhe o branch condicional correto para cada operador relacional
     if op == ">":
         linhas.append(f"    BGT {rotulo_true}")
     elif op == "<":
@@ -189,6 +209,7 @@ def _emit_comparacao(op: str, linhas: list[str], ctx: dict) -> None:
     elif op == "!=":
         linhas.append(f"    BNE {rotulo_true}")
 
+    # Falso -> carrega 0.0 em d0
     linhas.append("    LDR r0, =const_zero")
     linhas.append("    VLDR.F64 d0, [r0]")
     linhas.append(f"    B {rotulo_end}")
@@ -199,27 +220,34 @@ def _emit_comparacao(op: str, linhas: list[str], ctx: dict) -> None:
 
 
 def _emit_cond_valor(no: dict, linhas: list[str], ctx: dict) -> None:
+    """Avalia condição e deixa 1.0/0.0 no topo da pilha."""
     _emit_expressao(no, linhas, ctx)
 
 
 def _emit_if(no: dict, linhas: list[str], ctx: dict) -> None:
+    # (COND BLOCO IF): avalia COND; se 0.0 (falso) pula o bloco inteiro
     rotulo_fim = _novo_rotulo(ctx, "if_fim")
     _emit_cond_valor(no["cond"], linhas, ctx)
     _emit_pop_para_d(linhas, "d0")
+    # compara com 0.0 -> se igual, pula o bloco
     linhas.append("    LDR r0, =const_zero")
     linhas.append("    VLDR.F64 d1, [r0]")
     linhas.append("    VCMP.F64 d0, d1")
     linhas.append("    VMRS APSR_nzcv, FPSCR")
     linhas.append(f"    BEQ {rotulo_fim}")
     _emit_expressao(no["then_block"], linhas, ctx)
+    # bloco deixou um valor na pilha -> descarta (IF não produz valor útil)
     _emit_pop_para_d(linhas, "d0")
     linhas.append(f"{rotulo_fim}:")
+    # IF empilha 0.0 como resultado neutro (padroniza aridade)
     linhas.append("    LDR r0, =const_zero")
     linhas.append("    VLDR.F64 d0, [r0]")
     _emit_push_d0(linhas)
 
 
 def _emit_ifelse(no: dict, linhas: list[str], ctx: dict) -> None:
+    # (COND THEN ELSE IFELSE): dois rótulos — um pro else, outro pro fim.
+    # Se COND for falso, desvia pra else_block; senão executa then_block e pula.
     rotulo_else = _novo_rotulo(ctx, "else")
     rotulo_fim = _novo_rotulo(ctx, "ife_fim")
     _emit_cond_valor(no["cond"], linhas, ctx)
@@ -234,9 +262,13 @@ def _emit_ifelse(no: dict, linhas: list[str], ctx: dict) -> None:
     linhas.append(f"{rotulo_else}:")
     _emit_expressao(no["else_block"], linhas, ctx)
     linhas.append(f"{rotulo_fim}:")
+    # valor resultante do ramo escolhido já está no topo da pilha
 
 
 def _emit_while(no: dict, linhas: list[str], ctx: dict) -> None:
+    # (COND BLOCO WHILE): rótulo no início do loop e outro na saída.
+    # Avalia COND a cada iteração; se falso, desvia para o fim.
+    # O resultado do corpo é descartado (while só serve para efeitos colaterais).
     rotulo_ini = _novo_rotulo(ctx, "while_i")
     rotulo_fim = _novo_rotulo(ctx, "while_f")
     linhas.append(f"{rotulo_ini}:")
@@ -248,7 +280,7 @@ def _emit_while(no: dict, linhas: list[str], ctx: dict) -> None:
     linhas.append("    VMRS APSR_nzcv, FPSCR")
     linhas.append(f"    BEQ {rotulo_fim}")
     _emit_expressao(no["body"], linhas, ctx)
-    _emit_pop_para_d(linhas, "d0")
+    _emit_pop_para_d(linhas, "d0")  # descarta valor do corpo
     linhas.append(f"    B {rotulo_ini}")
     linhas.append(f"{rotulo_fim}:")
     linhas.append("    LDR r0, =const_zero")
@@ -256,7 +288,14 @@ def _emit_while(no: dict, linhas: list[str], ctx: dict) -> None:
     _emit_push_d0(linhas)
 
 
+# -------------------- Geração do programa final --------------------
+
+
 def gerar_assembly_arvore(arvore_programa: dict) -> str:
+    # Função principal do gerador. Percorre todos os statements da AST,
+    # emite o código de cada um e salva o resultado em resultado_N no .data.
+    # No final, adiciona as rotinas auxiliares e a seção .data com todas
+    # as constantes e variáveis de memória coletadas durante o percurso.
     if arvore_programa.get("tipo") != "program":
         raise ValueError("Raiz da AST deve ser do tipo 'program'")
     stmts = arvore_programa["stmts"]
@@ -287,6 +326,7 @@ def gerar_assembly_arvore(arvore_programa: dict) -> str:
         _emit_pop_para_d(linhas, "d0")
         linhas.append(f"    LDR r0, =resultado_{indice}")
         linhas.append("    VSTR.F64 d0, [r0]")
+        # exibe o resultado nos displays HEX do DE1-SoC (convertendo para inteiro)
         linhas.append(f"    @ Exibir resultado {indice + 1} nos HEX displays")
         linhas.append("    VCVT.S32.F64 s0, d0")
         linhas.append("    VMOV r0, s0")
@@ -296,8 +336,10 @@ def gerar_assembly_arvore(arvore_programa: dict) -> str:
     linhas.append("loop_final:")
     linhas.append("    B loop_final")
 
+    # ---- Rotinas auxiliares ----
     linhas.extend(_rotinas_auxiliares())
 
+    # ---- .data ----
     linhas.append(".data")
     for valor, rotulo in ctx["constantes"].items():
         linhas.append(f"{rotulo}: .double {valor}")
@@ -323,8 +365,15 @@ def gerar_assembly_arvore(arvore_programa: dict) -> str:
 
 
 def _rotinas_auxiliares() -> list[str]:
+    # Rotinas em Assembly puro para operações que não têm instrução nativa:
+    #   __op_idiv : divisão inteira (converte double -> int, divide, volta para double)
+    #   __op_mod  : resto da divisão inteira (divide e subtraí o quociente * divisor)
+    #   __op_pow  : potência com expoente inteiro (laço de multiplicações)
+    #   __sdiv32  : divisão de 32 bits por subtrações (Não existe SDIV no Cortex-A9)
+    #   __exibir_hex: exibe valor inteiro nos 6 displays HEX do DE1-SoC
     linhas: list[str] = []
     linhas.append("")
+    # idiv
     linhas.append("__op_idiv:")
     linhas.append("    PUSH {lr}")
     linhas.append("    VCVT.S32.F64 s0, d0")
@@ -337,6 +386,7 @@ def _rotinas_auxiliares() -> list[str]:
     linhas.append("    POP {lr}")
     linhas.append("    BX lr")
     linhas.append("")
+    # mod
     linhas.append("__op_mod:")
     linhas.append("    PUSH {r4, lr}")
     linhas.append("    VCVT.S32.F64 s0, d0")
@@ -353,6 +403,7 @@ def _rotinas_auxiliares() -> list[str]:
     linhas.append("    POP {r4, lr}")
     linhas.append("    BX lr")
     linhas.append("")
+    # pow
     linhas.append("__op_pow:")
     linhas.append("    PUSH {lr}")
     linhas.append("    VCVT.S32.F64 s2, d1")
@@ -377,6 +428,7 @@ def _rotinas_auxiliares() -> list[str]:
     linhas.append("    POP {lr}")
     linhas.append("    BX lr")
     linhas.append("")
+    # sdiv32
     linhas.append("__sdiv32:")
     linhas.append("    PUSH {r2, r3, r4, lr}")
     linhas.append("    CMP r1, #0")
@@ -406,6 +458,7 @@ def _rotinas_auxiliares() -> list[str]:
     linhas.append("    POP {r2, r3, r4, lr}")
     linhas.append("    BX lr")
     linhas.append("")
+    # exibir_hex
     linhas.append("__exibir_hex:")
     linhas.append("    PUSH {r1, r2, r3, r4, r5, r6, lr}")
     linhas.append("    LDR r1, =__hex_tabela")
@@ -442,6 +495,7 @@ def _rotinas_auxiliares() -> list[str]:
     linhas.append("    POP {r1, r2, r3, r4, r5, r6, lr}")
     linhas.append("    BX lr")
     linhas.append("")
+    # udiv_simples
     linhas.append("__udiv_simples:")
     linhas.append("    MOV r3, #0")
     linhas.append("__udiv_simples_loop:")

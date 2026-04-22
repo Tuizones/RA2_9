@@ -37,6 +37,12 @@
 #              |  > | < | == | != | >= | <=
 #   kw_ctrl3   -> IF | WHILE
 #   kw_ctrl4   -> IFELSE
+#
+# Nota sobre a fatoracao de body:
+#   Tanto "mais um statement" quanto "fim do programa" começam com LPAREN.
+#   Para resolver esse conflito LL(1), fatoramos à esquerda:
+#   body -> LPAREN body_tail  (consumimos o LPAREN primeiro,
+#   depois decidimos pelo próximo símbolo: END vs. inicio de expr_body)
 
 from __future__ import annotations
 
@@ -55,6 +61,8 @@ from .lexer_fsm import (
 # --------------------------------------------------------------
 # Símbolos terminais (vocabulário do parser)
 # --------------------------------------------------------------
+# Usamos strings para os terminais. Para operadores, o próprio lexeme.
+# Para parênteses e categorias especiais, nomes simbólicos.
 
 T_LPAREN = "LPAREN"
 T_RPAREN = "RPAREN"
@@ -103,37 +111,53 @@ def _token_para_terminal(token: Token) -> str:
 # --------------------------------------------------------------
 # Gramática como lista de produções
 # --------------------------------------------------------------
+# Cada produção é (LHS, [símbolos no RHS]). ε é representado por [].
 EPSILON = "ε"
 
 
 def _definicao_gramatica() -> list[tuple[str, list[str]]]:
+    # Lista todas as produções em ordem — a posição na lista é o número
+    # da produção (usado como índice na tabela LL(1)).
+    # Produção com RHS vazio = produção epsilon.
     producoes: list[tuple[str, list[str]]] = []
+
+    # 0: ponto de entrada do programa
     producoes.append(("program", [T_LPAREN, T_START, T_RPAREN, "body"]))
+    # 1: body sempre começa consumindo o LPAREN (fatoração)
     producoes.append(("body", [T_LPAREN, "body_tail"]))
+    # 2,3: body_tail decide se encontramos o END ou mais um statement
     producoes.append(("body_tail", [T_END, T_RPAREN]))
     producoes.append(("body_tail", ["expr_body", T_RPAREN, "body"]))
+    # 4: toda expressão é um item seguido de resto
     producoes.append(("expr_body", ["item", "rest1"]))
+    # 5,6: rest1 — pode ser vazio (ex.: (MEM)) ou ter mais um item
     producoes.append(("rest1", []))  # ε
     producoes.append(("rest1", ["item", "rest2"]))
-    producoes.append(("rest2", []))  # ε
-    producoes.append(("rest2", ["binop"]))
-    producoes.append(("rest2", ["kw_ctrl3"]))
-    producoes.append(("rest2", ["item", "item_tail"]))
+    # 7-10: rest2 — decide o tipo da expressão pelo que vem depois
+    producoes.append(("rest2", []))  # ε — (V MEM) ou (N RES)
+    producoes.append(("rest2", ["binop"]))         # (A B op)
+    producoes.append(("rest2", ["kw_ctrl3"]))      # (COND BLOCO IF/WHILE)
+    producoes.append(("rest2", ["item", "item_tail"]))  # (COND THEN ELSE IFELSE)
+    # 11: item_tail só pode ser IFELSE (o único operador de 4 operandos)
     producoes.append(("item_tail", ["kw_ctrl4"]))
+    # 12-15: os tipos possíveis de item
     producoes.append(("item", [T_NUMERO]))
     producoes.append(("item", [T_IDENT]))
     producoes.append(("item", [T_RES]))
     producoes.append(("item", [T_LPAREN, "expr_body", T_RPAREN]))
+    # uma produção por operador binário (simplifica a tabela)
     for op in ("+", "-", "*", "/", "|", "%", "^", ">", "<", "==", "!=", ">=", "<="):
         producoes.append(("binop", [op]))
+    # palavras-chave de controle
     producoes.append(("kw_ctrl3", [T_IF]))
     producoes.append(("kw_ctrl3", [T_WHILE]))
     producoes.append(("kw_ctrl4", [T_IFELSE]))
+
     return producoes
 
 
 # --------------------------------------------------------------
-# FIRST / FOLLOW
+# FIRST / FOLLOW (algoritmo clássico do livro-texto)
 # --------------------------------------------------------------
 
 
@@ -145,16 +169,26 @@ def _calcular_first(
     producoes: list[tuple[str, list[str]]],
     nao_terminais: set[str],
 ) -> dict[str, set[str]]:
+    # Algoritmo iterativo clássico do livro:
+    # fica rodando até que nenhum conjunto FIRST mude mais (ponto fixo).
+    # Para cada produção A -> X1 X2 ... Xn:
+    #   - adicionamos FIRST(X1) em FIRST(A)
+    #   - se X1 pode derivar ε, também adicionamos FIRST(X2), e assim por diante
+    #   - se TODOS os Xi derivam ε, adicionamos ε em FIRST(A)
     first: dict[str, set[str]] = {nt: set() for nt in nao_terminais}
+
     mudou = True
     while mudou:
         mudou = False
         for lhs, rhs in producoes:
+            # produção ε
             if not rhs:
                 if EPSILON not in first[lhs]:
                     first[lhs].add(EPSILON)
                     mudou = True
                 continue
+
+            # percorre símbolos até um que não derive ε
             anulavel = True
             for sim in rhs:
                 if _eh_terminal(sim, nao_terminais):
@@ -163,6 +197,7 @@ def _calcular_first(
                         mudou = True
                     anulavel = False
                     break
+                # não-terminal
                 antes = len(first[lhs])
                 first[lhs].update(first[sim] - {EPSILON})
                 if len(first[lhs]) != antes:
@@ -182,6 +217,7 @@ def _first_de_sequencia(
     first: dict[str, set[str]],
     nao_terminais: set[str],
 ) -> set[str]:
+    """FIRST de uma cadeia de símbolos."""
     resultado: set[str] = set()
     if not seq:
         resultado.add(EPSILON)
@@ -203,8 +239,11 @@ def _calcular_follow(
     first: dict[str, set[str]],
     inicial: str,
 ) -> dict[str, set[str]]:
+    # FOLLOW(A) = conjunto dos terminais que podem aparecer após A em alguma
+    # forma sentencial. Começamos colocando $ em FOLLOW do símbolo inicial.
     follow: dict[str, set[str]] = {nt: set() for nt in nao_terminais}
     follow[inicial].add(T_EOF)
+
     mudou = True
     while mudou:
         mudou = False
@@ -229,8 +268,13 @@ def _construir_tabela_ll1(
     first: dict[str, set[str]],
     follow: dict[str, set[str]],
 ) -> dict[tuple[str, str], int]:
+    # Para cada produção A -> α:
+    #   para cada terminal t em FIRST(α): M[A, t] = esta produção
+    #   se ε em FIRST(α): para cada t em FOLLOW(A): M[A, t] = esta produção
+    # Se alguma entrada já estiver ocupada = conflito = gramática não é LL(1).
     tabela: dict[tuple[str, str], int] = {}
     conflitos: list[str] = []
+
     for idx, (lhs, rhs) in enumerate(producoes):
         first_rhs = _first_de_sequencia(rhs, first, nao_terminais)
         for term in first_rhs - {EPSILON}:
@@ -248,13 +292,24 @@ def _construir_tabela_ll1(
                         f"Conflito LL(1) em [{lhs}, {term}]: produções {tabela[chave]} e {idx}"
                     )
                 tabela[chave] = idx
+
     if conflitos:
         raise Erros("Gramática não é LL(1):\n  " + "\n  ".join(conflitos))
     return tabela
 
 
+# --------------------------------------------------------------
+# API pública: construirGramatica
+# --------------------------------------------------------------
+
+
 def construirGramatica() -> dict:
+    # Junta tudo: cria as produções, separa terminais de não-terminais,
+    # calcula FIRST e FOLLOW, e monta a tabela LL(1).
+    # O dict retornado é passado para parsear() e também salvo como
+    # artefato de documentação no output/.
     producoes = _definicao_gramatica()
+
     nao_terminais: set[str] = set()
     terminais: set[str] = {T_EOF}
     for lhs, rhs in producoes:
@@ -263,10 +318,12 @@ def construirGramatica() -> dict:
         for sim in rhs:
             if sim not in nao_terminais:
                 terminais.add(sim)
+
     inicial = producoes[0][0]
     first = _calcular_first(producoes, nao_terminais)
     follow = _calcular_follow(producoes, nao_terminais, first, inicial)
     tabela = _construir_tabela_ll1(producoes, nao_terminais, first, follow)
+
     return {
         "producoes": producoes,
         "nao_terminais": nao_terminais,
@@ -279,28 +336,38 @@ def construirGramatica() -> dict:
 
 
 # --------------------------------------------------------------
-# Parser LL(1) com pilha
+# Parser LL(1) com pilha (table-driven) produzindo derivação
 # --------------------------------------------------------------
 
 
 def parsear(tokens: list[Token], tabela_ll1: dict) -> dict:
+    # Parser LL(1) dirigido por tabela com pilha explícita.
+    # A ideia é simples: mantemos uma pilha com o que ainda esperamos ver.
+    # A cada passo:
+    #   - se o topo é terminal e casa com o token atual -> consome
+    #   - se o topo é não-terminal -> consulta a tabela e expande
+    # Cada expansão é registrada em `derivacao` e em `passos` (que guarda
+    # também os casamentos, para montar a tabela completa no arquivo de saída).
     producoes = tabela_ll1["producoes"]
     tabela = tabela_ll1["tabela"]
     inicial = tabela_ll1["inicial"]
     nao_terminais = tabela_ll1["nao_terminais"]
 
+    # buffer de entrada: lista de (terminal, token) com $ marcador no final
     entrada: list[tuple[str, Token | None]] = [
         (_token_para_terminal(tok), tok) for tok in tokens
     ]
     entrada.append((T_EOF, None))
 
+    # pilha com o topo à direita (pop() retorna o topo)
+    # iniciamos com EOF e o símbolo inicial
     pilha: list[str] = [T_EOF, inicial]
     derivacao: list[dict] = []
-    passos: list[dict] = []
+    passos: list[dict] = []   # rastreamento completo para a tabela de derivação
     i = 0
 
     while pilha:
-        pilha_snap = list(pilha)
+        pilha_snap = list(pilha)           # snapshot antes do pop (topo = último)
         topo = pilha.pop()
         terminal_atual, token_atual = entrada[i]
 
@@ -312,6 +379,7 @@ def parsear(tokens: list[Token], tabela_ll1: dict) -> dict:
                 f"Entrada extra após o fim do programa: {_descreve(token_atual, terminal_atual)}"
             )
 
+        # terminal no topo -> casar com entrada
         if topo not in nao_terminais:
             if topo == terminal_atual:
                 passos.append({"tipo": "casa", "pilha": pilha_snap, "pos": i, "simbolo": topo})
@@ -322,6 +390,7 @@ def parsear(tokens: list[Token], tabela_ll1: dict) -> dict:
                 f"{_descreve(token_atual, terminal_atual)}"
             )
 
+        # não-terminal -> consulta a tabela
         chave = (topo, terminal_atual)
         if chave not in tabela:
             raise Erros(
@@ -333,9 +402,11 @@ def parsear(tokens: list[Token], tabela_ll1: dict) -> dict:
         passos.append({"tipo": "expande", "pilha": pilha_snap, "pos": i,
                        "idx": idx, "lhs": lhs, "rhs": list(rhs)})
         derivacao.append({"idx": idx, "lhs": lhs, "rhs": list(rhs), "pos_token": i})
+        # empilha o RHS em ordem reversa para consumir da esquerda
         for sim in reversed(rhs):
             pilha.append(sim)
 
+    # garantir que toda a entrada foi consumida
     if i != len(entrada) - 1:
         terminal_atual, token_atual = entrada[i]
         raise Erros(
@@ -358,9 +429,15 @@ def _descreve(token: Token | None, terminal: str) -> str:
 # A derivação LL(1) é útil para ver o processo de parsing, mas para gerar
 # assembly é muito mais prático ter uma AST com nós com significado.
 # Por isso re-parseamos os tokens de forma recursiva descendente aqui.
+# Na prática, essa função é o parser recursivo "limpo" que o parser com
+# pilha já validou antes.
 
 
 def gerarArvore(resultado_parse: dict) -> dict:
+    # Recebe o dict retornado por parsear() e devolve a AST.
+    # A AST tem a forma: {"tipo": "program", "stmts": [<stmt>, ...]}
+    # onde cada <stmt> pode ser: number, ident, res_ref, mem_read,
+    # mem_write, binary, if, ifelse ou while.
     tokens: list[Token] = resultado_parse["tokens"]
     pos = [0]  # cursor mutável
 
@@ -430,7 +507,7 @@ def gerarArvore(resultado_parse: dict) -> dict:
             esperar_terminal(T_RPAREN)
             return {"tipo": "binary", "op": tok.valor, "esq": primeiro, "dir": segundo}
 
-        # kw_ctrl3 + ')'
+        # kw_ctrl3 + ')'  -> (COND BODY IF) ou (COND BODY WHILE)
         if t == T_IF:
             pos[0] += 1
             esperar_terminal(T_RPAREN)
@@ -468,6 +545,7 @@ def gerarArvore(resultado_parse: dict) -> dict:
         if pos[0] >= len(tokens):
             raise Erros("Programa não foi finalizado com (END)")
         tok = tokens[pos[0]]
+        # detecta (END) olhando 3 tokens à frente
         if (
             tok.tipo == TIPO_ABRE
             and pos[0] + 2 < len(tokens)
@@ -503,6 +581,8 @@ def _eh_int_nao_negativo(valor: str) -> bool:
 
 
 def arvore_para_texto(no: dict, nivel: int = 0) -> str:
+    # Serializa a AST com indentação para facilitar a leitura.
+    # Cada nível a mais = 2 espaços.
     ident = "  " * nivel
     tipo = no.get("tipo")
     if tipo == "program":
@@ -556,6 +636,8 @@ def arvore_para_texto(no: dict, nivel: int = 0) -> str:
 
 
 def derivacao_para_texto(derivacao: list[dict]) -> str:
+    # Formato simples: lista numerada das produções aplicadas.
+    # Mais fácil de ler que a tabela completa quando só queremos ver as expansões.
     linhas: list[str] = []
     for i, passo in enumerate(derivacao, start=1):
         rhs = " ".join(passo["rhs"]) if passo["rhs"] else "ε"
@@ -564,6 +646,9 @@ def derivacao_para_texto(derivacao: list[dict]) -> str:
 
 
 def derivacao_para_texto_tabela(passos: list[dict], tokens: list[Token]) -> str:
+    # Formato de tabela markdown com 3 colunas:
+    #   Passo | Pilha (topo →) | Entrada (→) | Ação (expande ou casa)
+    # Cada linha corresponde a um passo do algoritmo.
     MAX_PILHA = 50
     MAX_ENT   = 40
 

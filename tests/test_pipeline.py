@@ -94,6 +94,8 @@ class TestParser(unittest.TestCase):
         self.assertEqual(arv["stmts"][1]["linhas_atras"], 1)
 
     def test_if(self):
+        toks = _programa(["((A) 0 >) (1 B) IF"])
+        # ajusta para sintaxe correta com parens extras
         toks = _programa(["(((A) 0 >) (1 B) IF)"])
         arv = gerarArvore(parsear(toks, self.g))
         self.assertEqual(arv["stmts"][0]["tipo"], "if")

@@ -30,6 +30,8 @@ from src.parser_ll1 import derivacao_para_texto_tabela, arvore_para_texto
 
 
 def _dump_gramatica(g: dict) -> str:
+    # Gera um arquivo markdown com as 3 seções exigidas pelo enunciado:
+    # produções numeradas, conjuntos FIRST/FOLLOW e tabela de análise LL(1).
     def fmt_set(s: set) -> str:
         return "{ " + ", ".join(sorted(s)) + " }" if s else "{ }"
 
@@ -38,6 +40,7 @@ def _dump_gramatica(g: dict) -> str:
     md.append("# Gramática LL(1)")
     md.append("")
 
+    # --- 1. Regras de Produção ---
     md.append("## 1. Regras de Produção")
     md.append("")
     md.append("| # | Não-Terminal | Produção |")
@@ -48,6 +51,7 @@ def _dump_gramatica(g: dict) -> str:
 
     md.append("")
 
+    # --- 2. Conjuntos FIRST ---
     md.append("## 2. Conjuntos FIRST")
     md.append("")
     md.append("| Não-Terminal | FIRST |")
@@ -57,6 +61,7 @@ def _dump_gramatica(g: dict) -> str:
 
     md.append("")
 
+    # --- 3. Conjuntos FOLLOW ---
     md.append("## 3. Conjuntos FOLLOW")
     md.append("")
     md.append("| Não-Terminal | FOLLOW |")
@@ -66,6 +71,7 @@ def _dump_gramatica(g: dict) -> str:
 
     md.append("")
 
+    # --- 4. Tabela de Análise LL(1) ---
     md.append("## 4. Tabela de Análise LL(1)")
     md.append("")
     md.append("| Não-Terminal | Terminal | Produção |")
@@ -79,6 +85,8 @@ def _dump_gramatica(g: dict) -> str:
 
 
 def _arvore_para_markdown(arvore: dict, arquivo_fonte: str) -> str:
+    # Gera o arquivo markdown com a representação textual da árvore sintática.
+    # O enunciado exige que a árvore esteja num arquivo markdown do repositório.
     md: list[str] = []
     md.append("# Árvore Sintática")
     md.append("")
@@ -91,6 +99,9 @@ def _arvore_para_markdown(arvore: dict, arquivo_fonte: str) -> str:
 
 
 def _resumo_linhas(arvore: dict) -> list[dict]:
+    # A exibirResultados() espera uma lista de dicts com 'descricao'.
+    # Esta função percorre a AST e monta essa lista com um texto simples
+    # para cada statement do programa.
     descricoes: list[dict] = []
     for stmt in arvore.get("stmts", []):
         tipo = stmt["tipo"]
@@ -153,18 +164,22 @@ def main() -> None:
         print(f"[ERRO] arquivo não encontrado: {erro.filename}", file=sys.stderr)
         sys.exit(1)
 
+    # salva o dump da gramática em markdown (produções, FIRST, FOLLOW, tabela LL(1))
     Path(args.gramatica_out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.gramatica_out).write_text(
         _dump_gramatica(resultado["gramatica"]) + "\n",
         encoding="utf-8",
     )
 
+    # salva a derivação no formato de tabela LL(1) (Pilha | Entrada | Ação)
+    # bem mais fácil de seguir do que uma lista numerada
     Path(args.derivacao_out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.derivacao_out).write_text(
         derivacao_para_texto_tabela(resultado["passos"], resultado["tokens"]) + "\n",
         encoding="utf-8",
     )
 
+    # salva a árvore em markdown (exigência do enunciado sec. 11.4)
     caminho_arvore_md = Path(args.arvore_out).with_suffix(".md")
     caminho_arvore_md.write_text(
         _arvore_para_markdown(resultado["arvore"], args.arquivo) + "\n",

@@ -1,0 +1,64 @@
+# Árvore Sintática
+
+Gerada a partir de: `teste1.txt`
+
+```
+program
+  binary(+)
+    number(10)
+    number(3)
+  binary(-)
+    number(7.5)
+    number(2.5)
+  binary(*)
+    number(4)
+    number(2.5)
+  binary(|)
+    number(10.0)
+    number(4.0)
+  binary(/)
+    number(10)
+    number(3)
+  binary(%)
+    number(10)
+    number(3)
+  binary(^)
+    number(2)
+    number(5)
+  mem_write(VARA)
+    number(20)
+  binary(|)
+    mem_read(VARA)
+    number(2)
+  res_ref(linhas_atras=2)
+  while
+    cond:
+      binary(>)
+        mem_read(VARA)
+        number(0)
+    body:
+      binary(-)
+        mem_read(VARA)
+        number(1)
+  ifelse
+    cond:
+      binary(>=)
+        mem_read(VARA)
+        number(5)
+    then:
+      mem_write(FLAG)
+        number(1)
+    else:
+      mem_write(FLAG)
+        number(0)
+  binary(==)
+    mem_read(FLAG)
+    number(0)
+  binary(-)
+    binary(+)
+      number(10)
+      number(3)
+    binary(*)
+      number(2)
+      number(4)
+```

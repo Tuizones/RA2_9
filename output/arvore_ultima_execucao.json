@@ -1,0 +1,211 @@
+{
+  "tipo": "program",
+  "stmts": [
+    {
+      "tipo": "binary",
+      "op": "+",
+      "esq": {
+        "tipo": "number",
+        "valor": "10"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "3"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "-",
+      "esq": {
+        "tipo": "number",
+        "valor": "7.5"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "2.5"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "*",
+      "esq": {
+        "tipo": "number",
+        "valor": "4"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "2.5"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "|",
+      "esq": {
+        "tipo": "number",
+        "valor": "10.0"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "4.0"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "/",
+      "esq": {
+        "tipo": "number",
+        "valor": "10"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "3"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "%",
+      "esq": {
+        "tipo": "number",
+        "valor": "10"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "3"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "^",
+      "esq": {
+        "tipo": "number",
+        "valor": "2"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "5"
+      }
+    },
+    {
+      "tipo": "mem_write",
+      "nome": "VARA",
+      "valor": {
+        "tipo": "number",
+        "valor": "20"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "|",
+      "esq": {
+        "tipo": "mem_read",
+        "nome": "VARA"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "2"
+      }
+    },
+    {
+      "tipo": "res_ref",
+      "linhas_atras": 2
+    },
+    {
+      "tipo": "while",
+      "cond": {
+        "tipo": "binary",
+        "op": ">",
+        "esq": {
+          "tipo": "mem_read",
+          "nome": "VARA"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "0"
+        }
+      },
+      "body": {
+        "tipo": "binary",
+        "op": "-",
+        "esq": {
+          "tipo": "mem_read",
+          "nome": "VARA"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "1"
+        }
+      }
+    },
+    {
+      "tipo": "ifelse",
+      "cond": {
+        "tipo": "binary",
+        "op": ">=",
+        "esq": {
+          "tipo": "mem_read",
+          "nome": "VARA"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "5"
+        }
+      },
+      "then_block": {
+        "tipo": "mem_write",
+        "nome": "FLAG",
+        "valor": {
+          "tipo": "number",
+          "valor": "1"
+        }
+      },
+      "else_block": {
+        "tipo": "mem_write",
+        "nome": "FLAG",
+        "valor": {
+          "tipo": "number",
+          "valor": "0"
+        }
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "==",
+      "esq": {
+        "tipo": "mem_read",
+        "nome": "FLAG"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "0"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "-",
+      "esq": {
+        "tipo": "binary",
+        "op": "+",
+        "esq": {
+          "tipo": "number",
+          "valor": "10"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "3"
+        }
+      },
+      "dir": {
+        "tipo": "binary",
+        "op": "*",
+        "esq": {
+          "tipo": "number",
+          "valor": "2"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "4"
+        }
+      }
+    }
+  ]
+}

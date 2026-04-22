@@ -652,12 +652,17 @@ def derivacao_para_texto_tabela(passos: list[dict], tokens: list[Token]) -> str:
     MAX_PILHA = 50
     MAX_ENT   = 40
 
+    def _escape_md(s: str) -> str:
+        """Escapa caracteres que quebram células de tabela Markdown."""
+        return s.replace("|", r"\|")
+
     def _pilha_str(snap: list[str]) -> str:
         s = " ".join(reversed(snap))
+        s = _escape_md(s)
         return s if len(s) <= MAX_PILHA else s[:MAX_PILHA - 1] + "…"
 
     def _ent_str(pos: int) -> str:
-        vals = [t.valor for t in tokens[pos:pos + 10]]
+        vals = [_escape_md(t.valor) for t in tokens[pos:pos + 10]]
         if pos + 10 < len(tokens):
             vals.append("…")
         if not vals:
@@ -674,9 +679,9 @@ def derivacao_para_texto_tabela(passos: list[dict], tokens: list[Token]) -> str:
         pilha_s = _pilha_str(p["pilha"])
         ent_s   = _ent_str(p["pos"])
         if p["tipo"] == "expande":
-            rhs = " ".join(p["rhs"]) if p["rhs"] else "ε"
-            acao = f"Expande: `{p['lhs']}` → `{rhs}`"
+            rhs = " ".join(_escape_md(s) for s in p["rhs"]) if p["rhs"] else "ε"
+            acao = f"Expande: `{_escape_md(p['lhs'])}` → `{rhs}`"
         else:
-            acao = f"Casa: `{p['simbolo']}`"
+            acao = f"Casa: `{_escape_md(p['simbolo'])}`"
         linhas.append(f"| {n} | `{pilha_s}` | `{ent_s}` | {acao} |")
     return "\n".join(linhas)

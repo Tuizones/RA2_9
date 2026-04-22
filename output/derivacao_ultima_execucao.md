@@ -31,32 +31,32 @@
 | 27 | `rest2 RPAREN body $` | `- ) ( 4 2.5 * ) ( 10.0 4.0 …` | Expande: `rest2` → `binop` |
 | 28 | `binop RPAREN body $` | `- ) ( 4 2.5 * ) ( 10.0 4.0 …` | Expande: `binop` → `-` |
 | 29 | `- RPAREN body $` | `- ) ( 4 2.5 * ) ( 10.0 4.0 …` | Casa: `-` |
-| 30 | `RPAREN body $` | `) ( 4 2.5 * ) ( 10.0 4.0 | …` | Casa: `RPAREN` |
-| 31 | `body $` | `( 4 2.5 * ) ( 10.0 4.0 | ) …` | Expande: `body` → `LPAREN body_tail` |
-| 32 | `LPAREN body_tail $` | `( 4 2.5 * ) ( 10.0 4.0 | ) …` | Casa: `LPAREN` |
-| 33 | `body_tail $` | `4 2.5 * ) ( 10.0 4.0 | ) ( …` | Expande: `body_tail` → `expr_body RPAREN body` |
-| 34 | `expr_body RPAREN body $` | `4 2.5 * ) ( 10.0 4.0 | ) ( …` | Expande: `expr_body` → `item rest1` |
-| 35 | `item rest1 RPAREN body $` | `4 2.5 * ) ( 10.0 4.0 | ) ( …` | Expande: `item` → `NUMERO` |
-| 36 | `NUMERO rest1 RPAREN body $` | `4 2.5 * ) ( 10.0 4.0 | ) ( …` | Casa: `NUMERO` |
-| 37 | `rest1 RPAREN body $` | `2.5 * ) ( 10.0 4.0 | ) ( 10 …` | Expande: `rest1` → `item rest2` |
-| 38 | `item rest2 RPAREN body $` | `2.5 * ) ( 10.0 4.0 | ) ( 10 …` | Expande: `item` → `NUMERO` |
-| 39 | `NUMERO rest2 RPAREN body $` | `2.5 * ) ( 10.0 4.0 | ) ( 10 …` | Casa: `NUMERO` |
-| 40 | `rest2 RPAREN body $` | `* ) ( 10.0 4.0 | ) ( 10 3 …` | Expande: `rest2` → `binop` |
-| 41 | `binop RPAREN body $` | `* ) ( 10.0 4.0 | ) ( 10 3 …` | Expande: `binop` → `*` |
-| 42 | `* RPAREN body $` | `* ) ( 10.0 4.0 | ) ( 10 3 …` | Casa: `*` |
-| 43 | `RPAREN body $` | `) ( 10.0 4.0 | ) ( 10 3 / …` | Casa: `RPAREN` |
-| 44 | `body $` | `( 10.0 4.0 | ) ( 10 3 / ) …` | Expande: `body` → `LPAREN body_tail` |
-| 45 | `LPAREN body_tail $` | `( 10.0 4.0 | ) ( 10 3 / ) …` | Casa: `LPAREN` |
-| 46 | `body_tail $` | `10.0 4.0 | ) ( 10 3 / ) ( …` | Expande: `body_tail` → `expr_body RPAREN body` |
-| 47 | `expr_body RPAREN body $` | `10.0 4.0 | ) ( 10 3 / ) ( …` | Expande: `expr_body` → `item rest1` |
-| 48 | `item rest1 RPAREN body $` | `10.0 4.0 | ) ( 10 3 / ) ( …` | Expande: `item` → `NUMERO` |
-| 49 | `NUMERO rest1 RPAREN body $` | `10.0 4.0 | ) ( 10 3 / ) ( …` | Casa: `NUMERO` |
-| 50 | `rest1 RPAREN body $` | `4.0 | ) ( 10 3 / ) ( 10 …` | Expande: `rest1` → `item rest2` |
-| 51 | `item rest2 RPAREN body $` | `4.0 | ) ( 10 3 / ) ( 10 …` | Expande: `item` → `NUMERO` |
-| 52 | `NUMERO rest2 RPAREN body $` | `4.0 | ) ( 10 3 / ) ( 10 …` | Casa: `NUMERO` |
-| 53 | `rest2 RPAREN body $` | `| ) ( 10 3 / ) ( 10 3 …` | Expande: `rest2` → `binop` |
-| 54 | `binop RPAREN body $` | `| ) ( 10 3 / ) ( 10 3 …` | Expande: `binop` → `|` |
-| 55 | `| RPAREN body $` | `| ) ( 10 3 / ) ( 10 3 …` | Casa: `|` |
+| 30 | `RPAREN body $` | `) ( 4 2.5 * ) ( 10.0 4.0 \| …` | Casa: `RPAREN` |
+| 31 | `body $` | `( 4 2.5 * ) ( 10.0 4.0 \| ) …` | Expande: `body` → `LPAREN body_tail` |
+| 32 | `LPAREN body_tail $` | `( 4 2.5 * ) ( 10.0 4.0 \| ) …` | Casa: `LPAREN` |
+| 33 | `body_tail $` | `4 2.5 * ) ( 10.0 4.0 \| ) ( …` | Expande: `body_tail` → `expr_body RPAREN body` |
+| 34 | `expr_body RPAREN body $` | `4 2.5 * ) ( 10.0 4.0 \| ) ( …` | Expande: `expr_body` → `item rest1` |
+| 35 | `item rest1 RPAREN body $` | `4 2.5 * ) ( 10.0 4.0 \| ) ( …` | Expande: `item` → `NUMERO` |
+| 36 | `NUMERO rest1 RPAREN body $` | `4 2.5 * ) ( 10.0 4.0 \| ) ( …` | Casa: `NUMERO` |
+| 37 | `rest1 RPAREN body $` | `2.5 * ) ( 10.0 4.0 \| ) ( 10 …` | Expande: `rest1` → `item rest2` |
+| 38 | `item rest2 RPAREN body $` | `2.5 * ) ( 10.0 4.0 \| ) ( 10 …` | Expande: `item` → `NUMERO` |
+| 39 | `NUMERO rest2 RPAREN body $` | `2.5 * ) ( 10.0 4.0 \| ) ( 10 …` | Casa: `NUMERO` |
+| 40 | `rest2 RPAREN body $` | `* ) ( 10.0 4.0 \| ) ( 10 3 …` | Expande: `rest2` → `binop` |
+| 41 | `binop RPAREN body $` | `* ) ( 10.0 4.0 \| ) ( 10 3 …` | Expande: `binop` → `*` |
+| 42 | `* RPAREN body $` | `* ) ( 10.0 4.0 \| ) ( 10 3 …` | Casa: `*` |
+| 43 | `RPAREN body $` | `) ( 10.0 4.0 \| ) ( 10 3 / …` | Casa: `RPAREN` |
+| 44 | `body $` | `( 10.0 4.0 \| ) ( 10 3 / ) …` | Expande: `body` → `LPAREN body_tail` |
+| 45 | `LPAREN body_tail $` | `( 10.0 4.0 \| ) ( 10 3 / ) …` | Casa: `LPAREN` |
+| 46 | `body_tail $` | `10.0 4.0 \| ) ( 10 3 / ) ( …` | Expande: `body_tail` → `expr_body RPAREN body` |
+| 47 | `expr_body RPAREN body $` | `10.0 4.0 \| ) ( 10 3 / ) ( …` | Expande: `expr_body` → `item rest1` |
+| 48 | `item rest1 RPAREN body $` | `10.0 4.0 \| ) ( 10 3 / ) ( …` | Expande: `item` → `NUMERO` |
+| 49 | `NUMERO rest1 RPAREN body $` | `10.0 4.0 \| ) ( 10 3 / ) ( …` | Casa: `NUMERO` |
+| 50 | `rest1 RPAREN body $` | `4.0 \| ) ( 10 3 / ) ( 10 …` | Expande: `rest1` → `item rest2` |
+| 51 | `item rest2 RPAREN body $` | `4.0 \| ) ( 10 3 / ) ( 10 …` | Expande: `item` → `NUMERO` |
+| 52 | `NUMERO rest2 RPAREN body $` | `4.0 \| ) ( 10 3 / ) ( 10 …` | Casa: `NUMERO` |
+| 53 | `rest2 RPAREN body $` | `\| ) ( 10 3 / ) ( 10 3 …` | Expande: `rest2` → `binop` |
+| 54 | `binop RPAREN body $` | `\| ) ( 10 3 / ) ( 10 3 …` | Expande: `binop` → `\|` |
+| 55 | `\| RPAREN body $` | `\| ) ( 10 3 / ) ( 10 3 …` | Casa: `\|` |
 | 56 | `RPAREN body $` | `) ( 10 3 / ) ( 10 3 % …` | Casa: `RPAREN` |
 | 57 | `body $` | `( 10 3 / ) ( 10 3 % ) …` | Expande: `body` → `LPAREN body_tail` |
 | 58 | `LPAREN body_tail $` | `( 10 3 / ) ( 10 3 % ) …` | Casa: `LPAREN` |
@@ -97,34 +97,34 @@
 | 93 | `binop RPAREN body $` | `^ ) ( 20 VARA ) ( ( VARA ) …` | Expande: `binop` → `^` |
 | 94 | `^ RPAREN body $` | `^ ) ( 20 VARA ) ( ( VARA ) …` | Casa: `^` |
 | 95 | `RPAREN body $` | `) ( 20 VARA ) ( ( VARA ) 2 …` | Casa: `RPAREN` |
-| 96 | `body $` | `( 20 VARA ) ( ( VARA ) 2 | …` | Expande: `body` → `LPAREN body_tail` |
-| 97 | `LPAREN body_tail $` | `( 20 VARA ) ( ( VARA ) 2 | …` | Casa: `LPAREN` |
-| 98 | `body_tail $` | `20 VARA ) ( ( VARA ) 2 | ) …` | Expande: `body_tail` → `expr_body RPAREN body` |
-| 99 | `expr_body RPAREN body $` | `20 VARA ) ( ( VARA ) 2 | ) …` | Expande: `expr_body` → `item rest1` |
-| 100 | `item rest1 RPAREN body $` | `20 VARA ) ( ( VARA ) 2 | ) …` | Expande: `item` → `NUMERO` |
-| 101 | `NUMERO rest1 RPAREN body $` | `20 VARA ) ( ( VARA ) 2 | ) …` | Casa: `NUMERO` |
-| 102 | `rest1 RPAREN body $` | `VARA ) ( ( VARA ) 2 | ) ( …` | Expande: `rest1` → `item rest2` |
-| 103 | `item rest2 RPAREN body $` | `VARA ) ( ( VARA ) 2 | ) ( …` | Expande: `item` → `IDENT` |
-| 104 | `IDENT rest2 RPAREN body $` | `VARA ) ( ( VARA ) 2 | ) ( …` | Casa: `IDENT` |
-| 105 | `rest2 RPAREN body $` | `) ( ( VARA ) 2 | ) ( 2 …` | Expande: `rest2` → `ε` |
-| 106 | `RPAREN body $` | `) ( ( VARA ) 2 | ) ( 2 …` | Casa: `RPAREN` |
-| 107 | `body $` | `( ( VARA ) 2 | ) ( 2 RES …` | Expande: `body` → `LPAREN body_tail` |
-| 108 | `LPAREN body_tail $` | `( ( VARA ) 2 | ) ( 2 RES …` | Casa: `LPAREN` |
-| 109 | `body_tail $` | `( VARA ) 2 | ) ( 2 RES ) …` | Expande: `body_tail` → `expr_body RPAREN body` |
-| 110 | `expr_body RPAREN body $` | `( VARA ) 2 | ) ( 2 RES ) …` | Expande: `expr_body` → `item rest1` |
-| 111 | `item rest1 RPAREN body $` | `( VARA ) 2 | ) ( 2 RES ) …` | Expande: `item` → `LPAREN expr_body RPAREN` |
-| 112 | `LPAREN expr_body RPAREN rest1 RPAREN body $` | `( VARA ) 2 | ) ( 2 RES ) …` | Casa: `LPAREN` |
-| 113 | `expr_body RPAREN rest1 RPAREN body $` | `VARA ) 2 | ) ( 2 RES ) ( …` | Expande: `expr_body` → `item rest1` |
-| 114 | `item rest1 RPAREN rest1 RPAREN body $` | `VARA ) 2 | ) ( 2 RES ) ( …` | Expande: `item` → `IDENT` |
-| 115 | `IDENT rest1 RPAREN rest1 RPAREN body $` | `VARA ) 2 | ) ( 2 RES ) ( …` | Casa: `IDENT` |
-| 116 | `rest1 RPAREN rest1 RPAREN body $` | `) 2 | ) ( 2 RES ) ( ( …` | Expande: `rest1` → `ε` |
-| 117 | `RPAREN rest1 RPAREN body $` | `) 2 | ) ( 2 RES ) ( ( …` | Casa: `RPAREN` |
-| 118 | `rest1 RPAREN body $` | `2 | ) ( 2 RES ) ( ( ( …` | Expande: `rest1` → `item rest2` |
-| 119 | `item rest2 RPAREN body $` | `2 | ) ( 2 RES ) ( ( ( …` | Expande: `item` → `NUMERO` |
-| 120 | `NUMERO rest2 RPAREN body $` | `2 | ) ( 2 RES ) ( ( ( …` | Casa: `NUMERO` |
-| 121 | `rest2 RPAREN body $` | `| ) ( 2 RES ) ( ( ( VARA …` | Expande: `rest2` → `binop` |
-| 122 | `binop RPAREN body $` | `| ) ( 2 RES ) ( ( ( VARA …` | Expande: `binop` → `|` |
-| 123 | `| RPAREN body $` | `| ) ( 2 RES ) ( ( ( VARA …` | Casa: `|` |
+| 96 | `body $` | `( 20 VARA ) ( ( VARA ) 2 \| …` | Expande: `body` → `LPAREN body_tail` |
+| 97 | `LPAREN body_tail $` | `( 20 VARA ) ( ( VARA ) 2 \| …` | Casa: `LPAREN` |
+| 98 | `body_tail $` | `20 VARA ) ( ( VARA ) 2 \| ) …` | Expande: `body_tail` → `expr_body RPAREN body` |
+| 99 | `expr_body RPAREN body $` | `20 VARA ) ( ( VARA ) 2 \| ) …` | Expande: `expr_body` → `item rest1` |
+| 100 | `item rest1 RPAREN body $` | `20 VARA ) ( ( VARA ) 2 \| ) …` | Expande: `item` → `NUMERO` |
+| 101 | `NUMERO rest1 RPAREN body $` | `20 VARA ) ( ( VARA ) 2 \| ) …` | Casa: `NUMERO` |
+| 102 | `rest1 RPAREN body $` | `VARA ) ( ( VARA ) 2 \| ) ( …` | Expande: `rest1` → `item rest2` |
+| 103 | `item rest2 RPAREN body $` | `VARA ) ( ( VARA ) 2 \| ) ( …` | Expande: `item` → `IDENT` |
+| 104 | `IDENT rest2 RPAREN body $` | `VARA ) ( ( VARA ) 2 \| ) ( …` | Casa: `IDENT` |
+| 105 | `rest2 RPAREN body $` | `) ( ( VARA ) 2 \| ) ( 2 …` | Expande: `rest2` → `ε` |
+| 106 | `RPAREN body $` | `) ( ( VARA ) 2 \| ) ( 2 …` | Casa: `RPAREN` |
+| 107 | `body $` | `( ( VARA ) 2 \| ) ( 2 RES …` | Expande: `body` → `LPAREN body_tail` |
+| 108 | `LPAREN body_tail $` | `( ( VARA ) 2 \| ) ( 2 RES …` | Casa: `LPAREN` |
+| 109 | `body_tail $` | `( VARA ) 2 \| ) ( 2 RES ) …` | Expande: `body_tail` → `expr_body RPAREN body` |
+| 110 | `expr_body RPAREN body $` | `( VARA ) 2 \| ) ( 2 RES ) …` | Expande: `expr_body` → `item rest1` |
+| 111 | `item rest1 RPAREN body $` | `( VARA ) 2 \| ) ( 2 RES ) …` | Expande: `item` → `LPAREN expr_body RPAREN` |
+| 112 | `LPAREN expr_body RPAREN rest1 RPAREN body $` | `( VARA ) 2 \| ) ( 2 RES ) …` | Casa: `LPAREN` |
+| 113 | `expr_body RPAREN rest1 RPAREN body $` | `VARA ) 2 \| ) ( 2 RES ) ( …` | Expande: `expr_body` → `item rest1` |
+| 114 | `item rest1 RPAREN rest1 RPAREN body $` | `VARA ) 2 \| ) ( 2 RES ) ( …` | Expande: `item` → `IDENT` |
+| 115 | `IDENT rest1 RPAREN rest1 RPAREN body $` | `VARA ) 2 \| ) ( 2 RES ) ( …` | Casa: `IDENT` |
+| 116 | `rest1 RPAREN rest1 RPAREN body $` | `) 2 \| ) ( 2 RES ) ( ( …` | Expande: `rest1` → `ε` |
+| 117 | `RPAREN rest1 RPAREN body $` | `) 2 \| ) ( 2 RES ) ( ( …` | Casa: `RPAREN` |
+| 118 | `rest1 RPAREN body $` | `2 \| ) ( 2 RES ) ( ( ( …` | Expande: `rest1` → `item rest2` |
+| 119 | `item rest2 RPAREN body $` | `2 \| ) ( 2 RES ) ( ( ( …` | Expande: `item` → `NUMERO` |
+| 120 | `NUMERO rest2 RPAREN body $` | `2 \| ) ( 2 RES ) ( ( ( …` | Casa: `NUMERO` |
+| 121 | `rest2 RPAREN body $` | `\| ) ( 2 RES ) ( ( ( VARA …` | Expande: `rest2` → `binop` |
+| 122 | `binop RPAREN body $` | `\| ) ( 2 RES ) ( ( ( VARA …` | Expande: `binop` → `\|` |
+| 123 | `\| RPAREN body $` | `\| ) ( 2 RES ) ( ( ( VARA …` | Casa: `\|` |
 | 124 | `RPAREN body $` | `) ( 2 RES ) ( ( ( VARA ) …` | Casa: `RPAREN` |
 | 125 | `body $` | `( 2 RES ) ( ( ( VARA ) 0 …` | Expande: `body` → `LPAREN body_tail` |
 | 126 | `LPAREN body_tail $` | `( 2 RES ) ( ( ( VARA ) 0 …` | Casa: `LPAREN` |

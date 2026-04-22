@@ -7,18 +7,21 @@
 # Disciplina: Linguagens Formais e Compiladores
 # Professor: Frank Coelho de Alcantara
 
-# Analisador léxico usando AFD (autômato finito determinístico).
-# Implementado só com funções de estado, sem usar regex.
-# Cada estado do autômato é uma função que recebe um caractere e decide
-# pra qual estado ir.
+# Analisador léxico implementado como um AFD (autômato finito determinístico).
+# Não usamos regex — cada estado é uma função Python que decide a transição.
 #
-# FASE 2: adicionamos as palavras reservadas START, END, IF, IFELSE, WHILE.
-# Os operadores relacionais e o operador | serão adicionados no próximo commit.
+# Atualizamos o léxico da Fase 1 para suportar:
+#   `/`  = divisão inteira  
+#   `|`  = divisão real      
+#   `%`  = resto da divisão
+#   `^`  = potenciação
+#   `+ - *` = os aritméticos de sempre
+#   Relacionais: `>`, `<`, `==`, `!=`, `>=`, `<=`
+#   Palavras reservadas novas: START, END, IF, IFELSE, WHILE (além do RES da Fase 1)
 #
-# Estados: inicial, numero, numero_decimal, identificador, barra
-#
-# Tokens: NUMERO, OPERADOR (+,-,*,/,//,%,^), PARENTESE_ABRE,
-#         PARENTESE_FECHA, IDENTIFICADOR (nomes de memória), KEYWORD
+# Os estados do AFD são:
+#   inicial, numero, numero_decimal, identificador,
+#   igual, diferente, maior, menor
 
 from dataclasses import dataclass
 
@@ -29,7 +32,7 @@ class Erros(Exception):
 
 @dataclass
 class Token:
-    """Um token com tipo, valor e posição na linha."""
+    """Um token com tipo, valor e posição."""
     tipo: str
     valor: str
     linha: int
@@ -43,8 +46,8 @@ TIPO_FECHA = "PARENTESE_FECHA"
 TIPO_IDENT = "IDENTIFICADOR"
 TIPO_KEYWORD = "KEYWORD"
 
-# Palavras reservadas — adicionamos START, END, IF, IFELSE, WHILE para a Fase 2.
-# Antes só tinha RES; agora checamos a set completa.
+# Palavras reservadas — quando o estado `identificador` fechar um token,
+# verificamos se o valor está aqui; se estiver, vira KEYWORD em vez de IDENT.
 PALAVRAS_RESERVADAS = {"RES", "START", "END", "IF", "IFELSE", "WHILE"}
 
 
@@ -61,9 +64,13 @@ def _eh_minuscula(char: str) -> bool:
 
 
 def _adicionar_token(contexto: dict, tipo: str, valor: str) -> None:
-    """Cria um Token e joga na lista."""
     contexto["tokens"].append(
-        Token(tipo=tipo, valor=valor, linha=contexto["linha"], coluna=contexto["inicio_token"] + 1)
+        Token(
+            tipo=tipo,
+            valor=valor,
+            linha=contexto["linha"],
+            coluna=contexto["inicio_token"] + 1,
+        )
     )
 
 
@@ -95,15 +102,23 @@ def estado_inicial(char: str, contexto: dict) -> tuple[str, bool]:
         contexto["inicio_token"] = contexto["i"]
         return "identificador", True
 
-    if char in "+-*%^":
+    if char in "+-*/|%^":
         contexto["inicio_token"] = contexto["i"]
         _adicionar_token(contexto, TIPO_OPERADOR, char)
         return "inicial", True
 
-    if char == "/":
-        contexto["buffer"] = "/"
+    if char == "=":
         contexto["inicio_token"] = contexto["i"]
-        return "barra", True
+        return "igual", True
+    if char == "!":
+        contexto["inicio_token"] = contexto["i"]
+        return "diferente", True
+    if char == ">":
+        contexto["inicio_token"] = contexto["i"]
+        return "maior", True
+    if char == "<":
+        contexto["inicio_token"] = contexto["i"]
+        return "menor", True
 
     if char == ".":
         raise Erros(
@@ -117,7 +132,9 @@ def estado_inicial(char: str, contexto: dict) -> tuple[str, bool]:
             f"identificadores devem usar apenas letras maiúsculas, encontrado '{char}'"
         )
 
-    raise Erros(f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: caractere inválido '{char}'")
+    raise Erros(
+        f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: caractere inválido '{char}'"
+    )
 
 
 def estado_numero(char: str, contexto: dict) -> tuple[str, bool]:
@@ -186,7 +203,6 @@ def estado_identificador(char: str, contexto: dict) -> tuple[str, bool]:
         )
 
     valor = contexto["buffer"]
-    # agora checamos a set completa (inclui todas as palavras-chave da Fase 2)
     if valor in PALAVRAS_RESERVADAS:
         _adicionar_token(contexto, TIPO_KEYWORD, valor)
     else:
@@ -195,13 +211,39 @@ def estado_identificador(char: str, contexto: dict) -> tuple[str, bool]:
     return "inicial", False
 
 
-def estado_barra(char: str, contexto: dict) -> tuple[str, bool]:
-    if char == "/":
-        _adicionar_token(contexto, TIPO_OPERADOR, "//")
-        contexto["buffer"] = ""
+def estado_igual(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, "==")
         return "inicial", True
-    _adicionar_token(contexto, TIPO_OPERADOR, "/")
-    contexto["buffer"] = ""
+    raise Erros(
+        f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
+        f"operador inválido '=' isolado (use '==')"
+    )
+
+
+def estado_diferente(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, "!=")
+        return "inicial", True
+    raise Erros(
+        f"Linha {contexto['linha']}, coluna {contexto['i'] + 1}: "
+        f"operador inválido '!' isolado (use '!=')"
+    )
+
+
+def estado_maior(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, ">=")
+        return "inicial", True
+    _adicionar_token(contexto, TIPO_OPERADOR, ">")
+    return "inicial", False
+
+
+def estado_menor(char: str, contexto: dict) -> tuple[str, bool]:
+    if char == "=":
+        _adicionar_token(contexto, TIPO_OPERADOR, "<=")
+        return "inicial", True
+    _adicionar_token(contexto, TIPO_OPERADOR, "<")
     return "inicial", False
 
 
@@ -218,8 +260,12 @@ def _finalizar(contexto: dict, estado: str) -> None:
             _adicionar_token(contexto, TIPO_KEYWORD, valor)
         else:
             _adicionar_token(contexto, TIPO_IDENT, valor)
-    elif estado == "barra":
-        _adicionar_token(contexto, TIPO_OPERADOR, "/")
+    elif estado == "maior":
+        _adicionar_token(contexto, TIPO_OPERADOR, ">")
+    elif estado == "menor":
+        _adicionar_token(contexto, TIPO_OPERADOR, "<")
+    elif estado in ("igual", "diferente"):
+        raise Erros(f"Linha {contexto['linha']}: operador relacional incompleto")
 
     if contexto["paren"] != 0:
         raise Erros(f"Linha {contexto['linha']}: parênteses desbalanceados")
@@ -241,7 +287,10 @@ def tokenizar_linha(linha: str, numero_linha: int = 1) -> list[Token]:
         "numero": estado_numero,
         "numero_decimal": estado_numero_decimal,
         "identificador": estado_identificador,
-        "barra": estado_barra,
+        "igual": estado_igual,
+        "diferente": estado_diferente,
+        "maior": estado_maior,
+        "menor": estado_menor,
     }
 
     chars = linha + "\n"

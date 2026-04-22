@@ -2,16 +2,31 @@
 #   Arthur Felipe Bach Biancolini (Tuizones)
 #   Emanuel Riceto da Silva (emanuelriceto)
 #   Frederico Virmond Fruet (fredfruet)
-# Grupo Canvas: RA1 18
+# Grupo Canvas: RA2 9
 # Instituição: Pontifícia Universidade Católica do Paraná
 # Disciplina: Linguagens Formais e Compiladores
 # Professor: Frank Coelho de Alcantara
 
-# Gerador de Assembly ARMv7 pra rodar no CPUlator (DE1-SoC).
-# Usa pilha pra empilhar/desempilhar operandos em ponto flutuante 64 bits.
-# Resultado aparece no display HEX da placa (0xFF200020).
-
-
+# Gerador de código Assembly ARMv7 para o CPUlator DE1-SoC.
+# Recebe a AST produzida por parser_ll1.gerarArvore() e percorre
+# recursivamente cada nó, emitindo instruções ARM.
+#
+# Estratégia: pilha de variáveis duplas (d-registers, VFPv3)
+#   todos os valores são tratados como double (IEEE 754 64-bit)
+#   operações empilham o resultado em d0 e usam VMOV+PUSH para salvar
+#
+# Operadores suportados:
+#   +, -, *  -> VADD/VSUB/VMUL.F64
+#   |        -> VDIV.F64 (divisão real)
+#   /        -> __op_idiv (divisão inteira via rotina auxiliar)
+#   %        -> __op_mod
+#   ^        -> __op_pow (expoente inteiro por multiplicações sucessivas)
+#   >, <, ==, !=, >=, <= -> VCMP.F64 + desvio condicional -> empilha 1.0 ou 0.0
+#
+# Estruturas de controle:
+#   IF    -> testa condição e desvia sobre o bloco se falso
+#   IFELSE-> dois rótulos (else + fim), executa um dos dois ramos
+#   WHILE -> rótulo de início + rótulo de saída, desvio condicional
 
 
 def _normalizar_nome_mem(nome: str) -> str:
@@ -19,67 +34,69 @@ def _normalizar_nome_mem(nome: str) -> str:
 
 
 def _coletar_memorias(no: dict, memorias: set[str]) -> None:
-    """Percorre a AST coletando nomes de variáveis MEM pra declarar no .data."""
     tipo = no["tipo"]
+    if tipo == "program":
+        for s in no["stmts"]:
+            _coletar_memorias(s, memorias)
+        return
     if tipo == "mem_write":
         memorias.add(_normalizar_nome_mem(no["nome"]))
         _coletar_memorias(no["valor"], memorias)
-    elif tipo == "mem_read":
+        return
+    if tipo == "mem_read":
         memorias.add(_normalizar_nome_mem(no["nome"]))
-    elif tipo == "binary":
+        return
+    if tipo == "binary":
         _coletar_memorias(no["esq"], memorias)
         _coletar_memorias(no["dir"], memorias)
-
-
-
-# Como empilhar/desempilhar doubles de 64 bits na pilha ARM:
-# VMOV r4,r5,d0 + PUSH {r4,r5}  -> empilha
-# POP {r4,r5} + VMOV dN,r4,r5   -> desempilha
+        return
+    if tipo == "if":
+        _coletar_memorias(no["cond"], memorias)
+        _coletar_memorias(no["then_block"], memorias)
+        return
+    if tipo == "ifelse":
+        _coletar_memorias(no["cond"], memorias)
+        _coletar_memorias(no["then_block"], memorias)
+        _coletar_memorias(no["else_block"], memorias)
+        return
+    if tipo == "while":
+        _coletar_memorias(no["cond"], memorias)
+        _coletar_memorias(no["body"], memorias)
+        return
 
 
 def _emit_push_d0(linhas: list[str]) -> None:
-    """Empilha d0."""
     linhas.append("    VMOV r4, r5, d0")
     linhas.append("    PUSH {r4, r5}")
 
 
 def _emit_pop_para_d(linhas: list[str], reg_d: str) -> None:
-    """Desempilha pra registrador FP."""
     linhas.append("    POP {r4, r5}")
     linhas.append(f"    VMOV {reg_d}, r4, r5")
 
 
+def _novo_rotulo(ctx: dict, base: str) -> str:
+    ctx["contador_rotulos"] += 1
+    return f"L_{base}_{ctx['contador_rotulos']}"
 
-# Emissão recursiva de instruções pra cada nó da AST
 
-
-def _emit_expressao(
-    no: dict,
-    linhas: list[str],
-    mapa_constantes: dict[str, str],
-    contador_constantes: list[int],
-    indice_linha: int,
-) -> None:
-    """Gera instruções Assembly pro nó da AST (recursivo)."""
+def _emit_expressao(no: dict, linhas: list[str], ctx: dict) -> None:
     tipo = no["tipo"]
 
-    # numero literal -> carrega constante do .data
-    # constantes iguais são reaproveitadas (deduplicacao)
     if tipo == "number":
         valor = no["valor"]
-        if valor not in mapa_constantes:
-            rotulo = f"const_{contador_constantes[0]}"
-            mapa_constantes[valor] = rotulo
-            contador_constantes[0] += 1
+        mapa = ctx["constantes"]
+        if valor not in mapa:
+            rotulo = f"const_{ctx['contador_const'][0]}"
+            mapa[valor] = rotulo
+            ctx["contador_const"][0] += 1
         else:
-            rotulo = mapa_constantes[valor]
-
+            rotulo = mapa[valor]
         linhas.append(f"    LDR r0, ={rotulo}")
         linhas.append("    VLDR.F64 d0, [r0]")
         _emit_push_d0(linhas)
         return
 
-    # leitura de variavel de memoria
     if tipo == "mem_read":
         mem = _normalizar_nome_mem(no["nome"])
         linhas.append(f"    LDR r0, =mem_{mem}")
@@ -87,9 +104,8 @@ def _emit_expressao(
         _emit_push_d0(linhas)
         return
 
-    # referencia a resultado de outra linha
     if tipo == "res_ref":
-        alvo = indice_linha - no["linhas_atras"]
+        alvo = ctx["indice_linha"] - no["linhas_atras"]
         if alvo < 0:
             alvo = 0
         linhas.append(f"    LDR r0, =resultado_{alvo}")
@@ -97,9 +113,8 @@ def _emit_expressao(
         _emit_push_d0(linhas)
         return
 
-    # escrita em memoria
     if tipo == "mem_write":
-        _emit_expressao(no["valor"], linhas, mapa_constantes, contador_constantes, indice_linha)
+        _emit_expressao(no["valor"], linhas, ctx)
         _emit_pop_para_d(linhas, "d0")
         mem = _normalizar_nome_mem(no["nome"])
         linhas.append(f"    LDR r0, =mem_{mem}")
@@ -107,47 +122,155 @@ def _emit_expressao(
         _emit_push_d0(linhas)
         return
 
-    # operacao binaria (A B op)
     if tipo == "binary":
-        _emit_expressao(no["esq"], linhas, mapa_constantes, contador_constantes, indice_linha)
-        _emit_expressao(no["dir"], linhas, mapa_constantes, contador_constantes, indice_linha)
-        _emit_pop_para_d(linhas, "d1")   # direito
-        _emit_pop_para_d(linhas, "d0")   # esquerdo
+        _emit_binario(no, linhas, ctx)
+        return
 
-        op = no["op"]
-        # operações nativas VFP
-        if op == "+":
-            linhas.append("    VADD.F64 d0, d0, d1")
-        elif op == "-":
-            linhas.append("    VSUB.F64 d0, d0, d1")
-        elif op == "*":
-            linhas.append("    VMUL.F64 d0, d0, d1")
-        elif op == "/":
-            linhas.append("    VDIV.F64 d0, d0, d1")
-        # essas precisam de rotinas auxiliares
-        elif op == "//":
-            linhas.append("    BL __op_idiv")
-        elif op == "%":
-            linhas.append("    BL __op_mod")
-        elif op == "^":
-            linhas.append("    BL __op_pow")
-        else:
-            raise ValueError(f"Operador não suportado: {op}")
-
-        _emit_push_d0(linhas)
+    if tipo == "if":
+        _emit_if(no, linhas, ctx)
+        return
+    if tipo == "ifelse":
+        _emit_ifelse(no, linhas, ctx)
+        return
+    if tipo == "while":
+        _emit_while(no, linhas, ctx)
         return
 
     raise ValueError(f"Nó inválido: {tipo}")
 
 
-def gerar_assembly_armv7(arvores: list[dict]) -> str:
-    """Gera o Assembly ARMv7 completo (.text + rotinas auxiliares + .data)."""
-    # coleta variaveis de memoria pra declarar no .data
-    memorias: set[str] = set()
-    for arvore in arvores:
-        _coletar_memorias(arvore, memorias)
+def _emit_binario(no: dict, linhas: list[str], ctx: dict) -> None:
+    _emit_expressao(no["esq"], linhas, ctx)
+    _emit_expressao(no["dir"], linhas, ctx)
+    _emit_pop_para_d(linhas, "d1")
+    _emit_pop_para_d(linhas, "d0")
 
-    # .text - diretivas do ARMv7
+    op = no["op"]
+
+    if op == "+":
+        linhas.append("    VADD.F64 d0, d0, d1")
+    elif op == "-":
+        linhas.append("    VSUB.F64 d0, d0, d1")
+    elif op == "*":
+        linhas.append("    VMUL.F64 d0, d0, d1")
+    elif op == "|":
+        linhas.append("    VDIV.F64 d0, d0, d1")
+    elif op == "/":
+        linhas.append("    BL __op_idiv")
+    elif op == "%":
+        linhas.append("    BL __op_mod")
+    elif op == "^":
+        linhas.append("    BL __op_pow")
+    elif op in (">", "<", "==", "!=", ">=", "<="):
+        _emit_comparacao(op, linhas, ctx)
+    else:
+        raise ValueError(f"Operador não suportado: {op}")
+
+    _emit_push_d0(linhas)
+
+
+def _emit_comparacao(op: str, linhas: list[str], ctx: dict) -> None:
+    linhas.append("    VCMP.F64 d0, d1")
+    linhas.append("    VMRS APSR_nzcv, FPSCR")
+
+    rotulo_true = _novo_rotulo(ctx, "cmp_t")
+    rotulo_end = _novo_rotulo(ctx, "cmp_e")
+
+    if op == ">":
+        linhas.append(f"    BGT {rotulo_true}")
+    elif op == "<":
+        linhas.append(f"    BLT {rotulo_true}")
+    elif op == ">=":
+        linhas.append(f"    BGE {rotulo_true}")
+    elif op == "<=":
+        linhas.append(f"    BLE {rotulo_true}")
+    elif op == "==":
+        linhas.append(f"    BEQ {rotulo_true}")
+    elif op == "!=":
+        linhas.append(f"    BNE {rotulo_true}")
+
+    linhas.append("    LDR r0, =const_zero")
+    linhas.append("    VLDR.F64 d0, [r0]")
+    linhas.append(f"    B {rotulo_end}")
+    linhas.append(f"{rotulo_true}:")
+    linhas.append("    LDR r0, =const_one")
+    linhas.append("    VLDR.F64 d0, [r0]")
+    linhas.append(f"{rotulo_end}:")
+
+
+def _emit_cond_valor(no: dict, linhas: list[str], ctx: dict) -> None:
+    _emit_expressao(no, linhas, ctx)
+
+
+def _emit_if(no: dict, linhas: list[str], ctx: dict) -> None:
+    rotulo_fim = _novo_rotulo(ctx, "if_fim")
+    _emit_cond_valor(no["cond"], linhas, ctx)
+    _emit_pop_para_d(linhas, "d0")
+    linhas.append("    LDR r0, =const_zero")
+    linhas.append("    VLDR.F64 d1, [r0]")
+    linhas.append("    VCMP.F64 d0, d1")
+    linhas.append("    VMRS APSR_nzcv, FPSCR")
+    linhas.append(f"    BEQ {rotulo_fim}")
+    _emit_expressao(no["then_block"], linhas, ctx)
+    _emit_pop_para_d(linhas, "d0")
+    linhas.append(f"{rotulo_fim}:")
+    linhas.append("    LDR r0, =const_zero")
+    linhas.append("    VLDR.F64 d0, [r0]")
+    _emit_push_d0(linhas)
+
+
+def _emit_ifelse(no: dict, linhas: list[str], ctx: dict) -> None:
+    rotulo_else = _novo_rotulo(ctx, "else")
+    rotulo_fim = _novo_rotulo(ctx, "ife_fim")
+    _emit_cond_valor(no["cond"], linhas, ctx)
+    _emit_pop_para_d(linhas, "d0")
+    linhas.append("    LDR r0, =const_zero")
+    linhas.append("    VLDR.F64 d1, [r0]")
+    linhas.append("    VCMP.F64 d0, d1")
+    linhas.append("    VMRS APSR_nzcv, FPSCR")
+    linhas.append(f"    BEQ {rotulo_else}")
+    _emit_expressao(no["then_block"], linhas, ctx)
+    linhas.append(f"    B {rotulo_fim}")
+    linhas.append(f"{rotulo_else}:")
+    _emit_expressao(no["else_block"], linhas, ctx)
+    linhas.append(f"{rotulo_fim}:")
+
+
+def _emit_while(no: dict, linhas: list[str], ctx: dict) -> None:
+    rotulo_ini = _novo_rotulo(ctx, "while_i")
+    rotulo_fim = _novo_rotulo(ctx, "while_f")
+    linhas.append(f"{rotulo_ini}:")
+    _emit_cond_valor(no["cond"], linhas, ctx)
+    _emit_pop_para_d(linhas, "d0")
+    linhas.append("    LDR r0, =const_zero")
+    linhas.append("    VLDR.F64 d1, [r0]")
+    linhas.append("    VCMP.F64 d0, d1")
+    linhas.append("    VMRS APSR_nzcv, FPSCR")
+    linhas.append(f"    BEQ {rotulo_fim}")
+    _emit_expressao(no["body"], linhas, ctx)
+    _emit_pop_para_d(linhas, "d0")
+    linhas.append(f"    B {rotulo_ini}")
+    linhas.append(f"{rotulo_fim}:")
+    linhas.append("    LDR r0, =const_zero")
+    linhas.append("    VLDR.F64 d0, [r0]")
+    _emit_push_d0(linhas)
+
+
+def gerar_assembly_arvore(arvore_programa: dict) -> str:
+    if arvore_programa.get("tipo") != "program":
+        raise ValueError("Raiz da AST deve ser do tipo 'program'")
+    stmts = arvore_programa["stmts"]
+
+    memorias: set[str] = set()
+    _coletar_memorias(arvore_programa, memorias)
+
+    ctx = {
+        "constantes": {},
+        "contador_const": [0],
+        "contador_rotulos": 0,
+        "indice_linha": 0,
+    }
+
     linhas: list[str] = []
     linhas.append(".syntax unified")
     linhas.append(".cpu cortex-a9")
@@ -157,36 +280,52 @@ def gerar_assembly_armv7(arvores: list[dict]) -> str:
     linhas.append(".text")
     linhas.append("_start:")
 
-    # mapa pra deduplicar constantes
-    mapa_constantes: dict[str, str] = {}
-    contador_constantes = [0]  # lista pra poder mutar na recursao
-
-    # gera instrucoes pra cada expressao
-    for indice, arvore in enumerate(arvores):
+    for indice, stmt in enumerate(stmts):
+        ctx["indice_linha"] = indice
         linhas.append(f"    @ Expressão {indice + 1}")
-        _emit_expressao(arvore, linhas, mapa_constantes, contador_constantes, indice)
+        _emit_expressao(stmt, linhas, ctx)
         _emit_pop_para_d(linhas, "d0")
-        # salva resultado
         linhas.append(f"    LDR r0, =resultado_{indice}")
         linhas.append("    VSTR.F64 d0, [r0]")
-        # mostra no display HEX
         linhas.append(f"    @ Exibir resultado {indice + 1} nos HEX displays")
         linhas.append("    VCVT.S32.F64 s0, d0")
         linhas.append("    VMOV r0, s0")
         linhas.append("    BL __exibir_hex")
 
-    # loop infinito (padrao bare-metal)
     linhas.append("")
     linhas.append("loop_final:")
     linhas.append("    B loop_final")
 
-    # --- Rotinas auxiliares ---
+    linhas.extend(_rotinas_auxiliares())
 
-    # divisao inteira //: F64 -> S32, divide, S32 -> F64
+    linhas.append(".data")
+    for valor, rotulo in ctx["constantes"].items():
+        linhas.append(f"{rotulo}: .double {valor}")
+    linhas.append("const_zero: .double 0.0")
+    linhas.append("const_one:  .double 1.0")
+    for mem in sorted(memorias):
+        linhas.append(f"mem_{mem}: .double 0.0")
+    for indice in range(len(stmts)):
+        linhas.append(f"resultado_{indice}: .double 0.0")
+    if not stmts:
+        linhas.append("resultado_0: .double 0.0")
+
+    linhas.append("")
+    linhas.append("@ Tabela 7-segmentos (0-9) para display HEX")
+    linhas.append("__hex_tabela:")
+    for byte, digito in zip(
+        ("0x3F", "0x06", "0x5B", "0x4F", "0x66", "0x6D", "0x7D", "0x07", "0x7F", "0x6F"),
+        range(10),
+    ):
+        linhas.append(f"    .byte {byte}  @ {digito}")
+
+    return "\n".join(linhas) + "\n"
+
+
+def _rotinas_auxiliares() -> list[str]:
+    linhas: list[str] = []
     linhas.append("")
     linhas.append("__op_idiv:")
-    linhas.append("    @ Entrada: d0 (A), d1 (B)")
-    linhas.append("    @ Saída: d0 = floor(A/B) usando divisão inteira em S32")
     linhas.append("    PUSH {lr}")
     linhas.append("    VCVT.S32.F64 s0, d0")
     linhas.append("    VCVT.S32.F64 s2, d1")
@@ -197,12 +336,8 @@ def gerar_assembly_armv7(arvores: list[dict]) -> str:
     linhas.append("    VCVT.F64.S32 d0, s0")
     linhas.append("    POP {lr}")
     linhas.append("    BX lr")
-
-    # resto: A % B = A - (A//B)*B
     linhas.append("")
     linhas.append("__op_mod:")
-    linhas.append("    @ Entrada: d0 (A), d1 (B)")
-    linhas.append("    @ Saída: d0 = A % B usando aritmética inteira S32")
     linhas.append("    PUSH {r4, lr}")
     linhas.append("    VCVT.S32.F64 s0, d0")
     linhas.append("    VCVT.S32.F64 s2, d1")
@@ -217,12 +352,8 @@ def gerar_assembly_armv7(arvores: list[dict]) -> str:
     linhas.append("    VCVT.F64.S32 d0, s0")
     linhas.append("    POP {r4, lr}")
     linhas.append("    BX lr")
-
-    # potencia: base^exp por multiplicacao iterativa
     linhas.append("")
     linhas.append("__op_pow:")
-    linhas.append("    @ Entrada: d0 (base), d1 (expoente inteiro positivo)")
-    linhas.append("    @ Saída: d0 = base ^ expoente")
     linhas.append("    PUSH {lr}")
     linhas.append("    VCVT.S32.F64 s2, d1")
     linhas.append("    VMOV r3, s2")
@@ -245,13 +376,8 @@ def gerar_assembly_armv7(arvores: list[dict]) -> str:
     linhas.append("    VLDR.F64 d0, [r0]")
     linhas.append("    POP {lr}")
     linhas.append("    BX lr")
-
-    # divisao inteira com sinal (subtracao iterativa)
-    # usada pelo idiv e mod
     linhas.append("")
     linhas.append("__sdiv32:")
-    linhas.append("    @ Entrada: r0 numerador, r1 denominador")
-    linhas.append("    @ Saída: r0 quociente (divisão inteira com sinal)")
     linhas.append("    PUSH {r2, r3, r4, lr}")
     linhas.append("    CMP r1, #0")
     linhas.append("    BEQ __sdiv32_divzero")
@@ -279,39 +405,30 @@ def gerar_assembly_armv7(arvores: list[dict]) -> str:
     linhas.append("    MOV r0, #0")
     linhas.append("    POP {r2, r3, r4, lr}")
     linhas.append("    BX lr")
-
-    # exibicao no display HEX: decompoe em digitos e usa tabela de 7 segmentos
     linhas.append("")
     linhas.append("__exibir_hex:")
-    linhas.append("    @ Entrada: r0 = valor inteiro (parte inteira do resultado)")
-    linhas.append("    @ Exibe nos HEX displays do DE1-SoC (endereço 0xFF200020)")
     linhas.append("    PUSH {r1, r2, r3, r4, r5, r6, lr}")
     linhas.append("    LDR r1, =__hex_tabela")
-    linhas.append("    LDR r6, =0xFF200020      @ HEX3-HEX0")
-    linhas.append("    @ Verificar se negativo")
-    linhas.append("    MOV r5, #0               @ flag negativo")
+    linhas.append("    LDR r6, =0xFF200020")
+    linhas.append("    MOV r5, #0")
     linhas.append("    CMP r0, #0")
     linhas.append("    RSBMI r0, r0, #0")
     linhas.append("    MOVMI r5, #1")
-    linhas.append("    MOV r4, #0               @ resultado acumulado para HEX")
-    linhas.append("    @ Dígito 0 (unidades)")
+    linhas.append("    MOV r4, #0")
     linhas.append("    MOV r2, #10")
     linhas.append("    BL __udiv_simples")
-    linhas.append("    LDRB r3, [r1, r3]        @ r3 = resto da divisão anterior")
+    linhas.append("    LDRB r3, [r1, r3]")
     linhas.append("    ORR r4, r4, r3")
-    linhas.append("    @ Dígito 1 (dezenas)")
     linhas.append("    MOV r2, #10")
     linhas.append("    BL __udiv_simples")
     linhas.append("    LDRB r3, [r1, r3]")
     linhas.append("    ORR r4, r4, r3, LSL #8")
-    linhas.append("    @ Dígito 2 (centenas)")
     linhas.append("    MOV r2, #10")
     linhas.append("    BL __udiv_simples")
     linhas.append("    LDRB r3, [r1, r3]")
     linhas.append("    ORR r4, r4, r3, LSL #16")
-    linhas.append("    @ Dígito 3 (sinal ou milhares)")
     linhas.append("    CMP r5, #1")
-    linhas.append("    MOVEQ r3, #0x40          @ segmento '-' (segmento g)") 
+    linhas.append("    MOVEQ r3, #0x40")
     linhas.append("    BEQ __exibir_hex_store")
     linhas.append("    MOV r2, #10")
     linhas.append("    BL __udiv_simples")
@@ -324,11 +441,8 @@ def gerar_assembly_armv7(arvores: list[dict]) -> str:
     linhas.append("    STR r4, [r6]")
     linhas.append("    POP {r1, r2, r3, r4, r5, r6, lr}")
     linhas.append("    BX lr")
-
-    # divisao sem sinal simples (usada pelo exibir_hex)
     linhas.append("")
     linhas.append("__udiv_simples:")
-    linhas.append("    @ r0 / r2 -> r0 = quociente, r3 = resto")
     linhas.append("    MOV r3, #0")
     linhas.append("__udiv_simples_loop:")
     linhas.append("    CMP r0, r2")
@@ -337,47 +451,13 @@ def gerar_assembly_armv7(arvores: list[dict]) -> str:
     linhas.append("    ADD r3, r3, #1")
     linhas.append("    B __udiv_simples_loop")
     linhas.append("__udiv_simples_done:")
-    linhas.append("    @ r3 = quociente, r0 = resto")
-    linhas.append("    MOV r12, r0              @ salva resto em r12")
-    linhas.append("    MOV r0, r3               @ r0 = quociente")
-    linhas.append("    MOV r3, r12              @ r3 = resto")
+    linhas.append("    MOV r12, r0")
+    linhas.append("    MOV r0, r3")
+    linhas.append("    MOV r3, r12")
     linhas.append("    BX lr")
     linhas.append("")
+    return linhas
 
-    # .data - constantes, variaveis de memoria e resultados
-    linhas.append(".data")
 
-    # constantes numericas
-    for valor, rotulo in mapa_constantes.items():
-        linhas.append(f"{rotulo}: .double {valor}")
-
-    # 1.0 pro __op_pow
-    linhas.append("const_one: .double 1.0")
-
-    # variaveis de memoria
-    for mem in sorted(memorias):
-        linhas.append(f"mem_{mem}: .double 0.0")
-
-    # resultado de cada linha
-    for indice in range(len(arvores)):
-        linhas.append(f"resultado_{indice}: .double 0.0")
-
-    if not arvores:
-        linhas.append("resultado_0: .double 0.0")
-
-    # tabela 7 segmentos pro display HEX (0-9)
-    linhas.append("")
-    linhas.append("@ Tabela de segmentos para display HEX (0-9)")
-    linhas.append("__hex_tabela:")
-    linhas.append("    .byte 0x3F  @ 0")
-    linhas.append("    .byte 0x06  @ 1")
-    linhas.append("    .byte 0x5B  @ 2")
-    linhas.append("    .byte 0x4F  @ 3")
-    linhas.append("    .byte 0x66  @ 4")
-    linhas.append("    .byte 0x6D  @ 5")
-    linhas.append("    .byte 0x7D  @ 6")
-    linhas.append("    .byte 0x07  @ 7")
-    linhas.append("    .byte 0x7F  @ 8")
-    linhas.append("    .byte 0x6F  @ 9")
-
-    return "\n".join(linhas) + "\n"
+# Compatibilidade: assinatura usada internamente pelo pipeline da Fase 2
+gerarAssembly = gerar_assembly_arvore

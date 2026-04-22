@@ -1,379 +1,714 @@
-# RA1 18 Linguagens Formais e Compiladores
+# RA2 9 — Analisador Sintático LL(1) com Geração de Assembly ARMv7
 
 | | |
 |---|---|
 | **Instituição** | Pontifícia Universidade Católica do Paraná |
 | **Disciplina** | Linguagens Formais e Compiladores |
 | **Professor** | Frank Coelho de Alcantara |
-| **Grupo Canvas** | RA1 18 |
+| **Grupo Canvas** | RA2 9 |
+| **Fase** | 2 — Analisador Sintático LL(1) |
 
-### Integrantes 
+### Integrantes
+| Nome | Usuário GitHub |
+|---|---|
+| Arthur Felipe Bach Biancolini | Tuizones |
+| Emanuel Riceto da Silva | emanuelriceto |
+| Frederico Virmond Fruet | fredfruet |
 
-| Nome |
-|---|
-| Arthur Felipe Bach Biancolini (Tuizones) |
-| Emanuel Riceto da Silva (emanuelriceto) |
-| Frederico Virmond Fruet (fredfruet) |
-
----
-
-## Objetivo
-
-Programa em Python que lê um arquivo de texto contendo expressões aritméticas em **Notação Polonesa Reversa (RPN)**, realiza **análise léxica** por meio de um **Autômato Finito Determinístico (AFD)** implementado exclusivamente com funções de estado (sem expressões regulares), e gera código **Assembly ARMv7** compatível com o simulador **CPUlator DE1-SoC v16.1**.
-
-### Funcionalidades
-
-- Leitura de arquivo `.txt` com uma expressão RPN por linha.
-- Análise léxica via AFD com 5 estados (funções), sem uso de regex.
-- Suporte a 7 operadores: `+`, `-`, `*`, `/`, `//`, `%`, `^`.
-- Comandos especiais: `MEM` (leitura), `(valor MEM)` (escrita) e `(valor RES)` (resultado).
-- Aritmética em ponto flutuante IEEE 754 de 64 bits (`.double`, instruções `VLDR`/`VSTR`/`VADD`/`VSUB`/`VMUL`/`VDIV`).
-- Exibição do resultado no display HEX (HEX3–HEX0) da DE1-SoC via endereço `0xFF200020`.
-- Salvamento dos tokens da última execução em arquivo texto com formato `TIPO:valor`.
-
-### Números Negativos
-
-Em Notação Polonesa Reversa não existe ambiguidade entre o operador de subtração e a negação unária, como ocorre na notação infixa. O caractere `-` é **sempre** um operador binário que recebe dois operandos. Para representar um número negativo, basta subtrair o valor de zero:
-
-| Valor desejado | Expressão RPN | Resultado |
-|---|---|---|
-| −3 | `(0 3 -)` | 0 − 3 = −3 |
-| −7.5 | `(0 7.5 -)` | 0 − 7.5 = −7.5 |
-| −1 × (4 + 2) | `(0 (4 2 +) -)` | 0 − 6 = −6 |
-
-Essa abordagem elimina a necessidade de um operador unário de negação e mantém a gramática da linguagem simples e uniforme — todos os operadores (`+`, `-`, `*`, `/`, `//`, `%`, `^`) são estritamente binários.
+> **Índice rápido:**
+> [O que o projeto faz](#1-o-que-o-projeto-faz) ·
+> [Pipeline](#2-pipeline-end-to-end) ·
+> [Estrutura de arquivos](#3-estrutura-do-repositório) ·
+> [A linguagem](#4-a-linguagem) ·
+> [Como executar](#5-como-executar) ·
+> [Gramática LL(1)](#6-gramática-ll1) ·
+> [FIRST e FOLLOW](#7-conjuntos-first-e-follow) ·
+> [Tabela de Análise](#8-tabela-de-análise-ll1) ·
+> [Como o parser funciona](#9-como-o-parser-funciona) ·
+> [A AST](#10-a-árvore-sintática-ast) ·
+> [Geração de Assembly](#11-geração-de-assembly) ·
+> [Testes](#12-arquivos-de-teste) ·
+> [Tratamento de erros](#13-tratamento-de-erros) ·
+> [Distribuição do trabalho](#14-distribuição-do-trabalho) ·
+> [Checklist](#15-checklist-do-enunciado)
 
 ---
 
-## Fluxo de Execução (Pipeline)
+## 1. O que o projeto faz
 
-O programa segue um pipeline sequencial de 5 etapas, desde a leitura do arquivo até a geração final do Assembly:
+Este projeto é um **compilador completo de brinquedo**: lê um arquivo-fonte
+escrito numa linguagem RPN (Notação Polonesa Reversa) personalizada, valida
+a sintaxe com um **parser LL(1)**, constrói uma **Árvore Sintática Abstrata
+(AST)** e gera **código Assembly ARMv7** pronto para rodar no simulador
+[CPUlator DE1-SoC](https://cpulator.01xz.net/?sys=arm-de1soc).
 
-```
- Arquivo .txt ──► lerArquivo() ──► parseExpressao() ──► executarExpressao() ──► gerarAssembly() ──► exibirResultados()
-     │                │                  │                     │                     │                    │
-  entrada        lista de           tokens (AFD)          validação            código .s           console
-  de texto        linhas            + árvore AST          semântica          ARMv7 completo
-```
+### O que é LL(1)?
 
-### Etapa 1 — Leitura (`lerArquivo`)
+Um parser **LL(1)** lê a entrada da **esquerda para a direita** (*Left-to-right*),
+produz uma derivação mais à **esquerda** (*Leftmost*) e precisa de apenas
+**1 símbolo de lookahead** para decidir qual regra aplicar — sem retrocesso,
+sem ambiguidade.
 
-Recebe o caminho do arquivo e uma lista vazia. Lê linha a linha, descartando:
-- Linhas em branco
-- Linhas que começam com `#` (comentários)
-
-As linhas restantes são adicionadas à lista para processamento.
-
-### Etapa 2 — Análise Léxica e Parsing (`parseExpressao`)
-
-Cada linha passa pela função `tokenizar_linha()` do AFD (`lexer_fsm.py`), que produz uma lista de objetos `Token`, cada um com:
-- `tipo` — classificação do token (`NUMERO`, `OPERADOR`, `PARENTESE_ABRE`, `PARENTESE_FECHA`, `IDENTIFICADOR`, `KEYWORD`)
-- `valor` — texto original do token
-- `linha` e `coluna` — posição no arquivo de entrada
-
-Em seguida, os tokens são organizados em uma **Árvore Sintática Abstrata (AST)** por um parser recursivo descendente. Os tipos de nós da AST são:
-
-| Nó da AST | Exemplo de entrada | Descrição |
-|---|---|---|
-| `binary` | `(3.0 2.0 +)` | Operação binária com operandos esquerdo, direito e operador |
-| `number` | `3.14` | Literal numérico (inteiro ou decimal) |
-| `ident` | `MEM` | Identificador em letras maiúsculas |
-| `mem_write` | `(10.5 VARA)` | Escrita de valor em variável de memória |
-| `mem_read` | `(VARA)` | Leitura de variável de memória |
-| `res_ref` | `(2 RES)` | Referência ao resultado de N linhas anteriores |
-
-Expressões aninhadas como `((3.0 2.0 +) (4.0 1.0 -) *)` geram ASTs com sub-árvores recursivas.
-
-### Etapa 3 — Validação Semântica (`executarExpressao`)
-
-Processa a AST e valida a semântica da expressão:
-- **`mem_write`**: registra a variável como definida no dicionário `contexto["memoria"]`.
-- **`mem_read`**: verifica se a variável existe; se não, marca como `"não inicializada"`.
-- **`res_ref`**: valida se o índice `N` é alcançável — por exemplo, `(2 RES)` na primeira linha gera erro porque não existem 2 resultados anteriores.
-- **`binary`**: aceita a expressão como válida (o cálculo real é delegado ao Assembly).
-
-O contexto é compartilhado entre todas as linhas, permitindo que uma expressão referencie memórias ou resultados definidos por expressões anteriores.
-
-### Etapa 4 — Geração de Assembly (`gerarAssembly`)
-
-Percorre as ASTs de todas as linhas e gera código Assembly ARMv7 completo. O gerador utiliza uma **avaliação baseada em pilha (stack-based)**: cada operando é carregado em `d0` e empilhado via `PUSH`; operações binárias desempilham dois operandos, operam e reempilham o resultado.
-
-O código gerado inclui:
-- **Seção `.text`** — instruções executáveis com prefixo `_start:`
-- **Seção `.data`** — constantes `.double`, variáveis de memória (`mem_*`), resultados por linha (`resultado_N`)
-- **Rotinas auxiliares** — `__op_idiv`, `__op_mod`, `__op_pow`, `__sdiv32`, `__exibir_hex`, `__udiv_simples`
-
-### Etapa 5 — Exibição (`exibirResultados`)
-
-Imprime no console uma descrição de cada linha processada, no formato:
+Ele usa uma **pilha** e uma **tabela de decisão** `M[não-terminal, terminal]`:
 
 ```
-Linha 1: expressão válida
-Linha 2: memória VARA marcada como definida
-Linha 3: leitura da memória VARA
-Linha 4: referência ao resultado de 1 linhas atrás
-```
-
----
-
-## Exemplo de Uso
-
-### Arquivo de entrada (`teste1.txt`)
-
-```
-(3.0 2.0 +)
-(10.0 4.0 -)
-(2.5 8.0 *)
-(9.0 3.0 /)
-(10 3 //)
-(10 3 %)
-(2 5 ^)
-((3.0 2.0 +) (4.0 1.0 -) *)
-(2 RES)
-(12.5 MEM)
-(MEM)
-```
-
-### Tokens gerados (`tokens_ultima_execucao.txt`)
-
-```
-linha_1;PARENTESE_ABRE:(,NUMERO:3.0,NUMERO:2.0,OPERADOR:+,PARENTESE_FECHA:)
-linha_2;PARENTESE_ABRE:(,NUMERO:10.0,NUMERO:4.0,OPERADOR:-,PARENTESE_FECHA:)
+Pilha: [ program  $  ]     Token corrente: (
+→ consulta M[program, (]  →  expande: program → LPAREN START RPAREN body
+Pilha: [ LPAREN  START  RPAREN  body  $ ]
+→ topo LPAREN casa com (   →  consome token
 ...
 ```
 
-### Assembly gerado (trecho simplificado)
+---
 
-```asm
-.syntax unified
-.cpu cortex-a9
-.fpu vfpv3
-.global _start
+## 2. Pipeline end-to-end
 
-.text
-_start:
-    @ Expressão 1
-    LDR r0, =const_0          @ carrega 3.0
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_1          @ carrega 2.0
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}               @ desempilha 2.0 → d1
-    VMOV d1, r4, r5
-    POP {r4, r5}               @ desempilha 3.0 → d0
-    VMOV d0, r4, r5
-    VADD.F64 d0, d0, d1       @ d0 = 3.0 + 2.0 = 5.0
-    ...
-    BL __exibir_hex            @ mostra 5 no display HEX
+Tudo que acontece ao rodar `python main.py teste1.txt`:
 
-.data
-const_0: .double 3.0
-const_1: .double 2.0
-resultado_0: .double 0.0
+```mermaid
+flowchart LR
+    A[("teste1.txt")] --> B["lerArquivo()"]
+    B --> C["tokenizar_linha()\n(AFD da Fase 1)"]
+    C --> D[("tokens_ultima\n_execucao.txt")]
+    D --> E["lerTokens()"]
+    F["construirGramatica()\nFIRST · FOLLOW · Tabela"] --> G
+    E --> G["parsear()\n(LL(1) com pilha)"]
+    G --> H["gerarArvore()"]
+    H --> I[("arvore_ultima\n_execucao.json\n+ .md")]
+    H --> J["gerarAssembly()"]
+    J --> K[("ultima_execucao.s")]
+    H --> L["exibirResultados()"]
+    L --> M(["console"])
+    F --> N[("gramatica_dump.md")]
+    G --> O[("derivacao_ultima\n_execucao.md")]
+
+    classDef io fill:#fef3c7,stroke:#d97706
+    classDef step fill:#dbeafe,stroke:#1d4ed8
+    class A,D,I,K,N,O io
+    class B,C,E,G,H,J,L,F step
 ```
+
+### Fluxo em palavras
+
+1. **`lerArquivo`** — abre o `.txt`, ignora linhas em branco e comentários `#`.
+2. **`tokenizar_linha`** — o AFD da Fase 1 classifica cada caractere em tokens
+   (`NUMERO`, `IDENT`, `LPAREN`, operadores, keywords…).
+3. **`lerTokens`** — relê os tokens do arquivo salvo (integração Fase 1 → Fase 2).
+4. **`construirGramatica`** — monta as 32 produções, calcula FIRST e FOLLOW
+   (algoritmo de ponto-fixo) e constrói a tabela LL(1).
+5. **`parsear`** — roda o algoritmo de pilha, registrando cada passo.
+6. **`gerarArvore`** — re-percorre os passos e constrói a AST semântica.
+7. **`gerarAssembly`** — percorre a AST recursivamente emitindo instruções ARMv7.
+8. Salva todos os artefatos em `output/`.
 
 ---
 
-## Estrutura do Projeto
+## 3. Estrutura do Repositório
 
 ```
 .
-├── main.py                          # Ponto de entrada (CLI)
-├── README.md
-├── teste1.txt                   # 11 expressões — operadores básicos
-├── teste2.txt                   # 10 expressões — variável VARA
-├── teste3.txt                   # 10 expressões — variável TEMP
+├── main.py                              # Ponto de entrada (CLI)
+├── README.md                            # Este arquivo
+├── gramatica.md                         # Gramática formal (EBNF estendido)
+├── docs/
+│   └── diagramas.md                     # Diagramas Mermaid detalhados
+│
+├── teste1.txt                           # Programa de teste 1 (≥10 linhas)
+├── teste2.txt                           # Programa de teste 2 (≥10 linhas)
+├── teste3.txt                           # Programa de teste 3 (≥10 linhas)
+├── teste_erro_lexico.txt                # Casos de erro léxico
+├── teste_erro_sintatico.txt             # Casos de erro sintático
+│
 ├── src/
-│   ├── lexer_fsm.py                 # AFD — analisador léxico
-│   ├── pipeline.py                  # Funções obrigatórias do enunciado
-│   └── armv7_generator.py           # Gerador de Assembly ARMv7
+│   ├── lexer_fsm.py                     # AFD tokenizador (Fase 1, reaproveitado)
+│   ├── parser_ll1.py                    # Gramática + parser LL(1) + AST
+│   ├── armv7_generator.py               # Gerador de Assembly ARMv7
+│   └── pipeline.py                      # Funções obrigatórias do enunciado
 │
 ├── tests/
-│   ├── test_lexer.py                # 26 testes do analisador léxico
-│   └── test_pipeline.py             # 12 testes do pipeline e geração
+│   ├── test_lexer.py                    # Testes do AFD léxico
+│   └── test_pipeline.py                 # Testes do parser, AST e Assembly
 │
-│
-├── output/
-    ├── ultima_execucao.s            # Assembly gerado na última execução
-    └── tokens_ultima_execucao.txt   # Tokens da última execução
-
+└── output/                              # Artefatos da última execução
+    ├── tokens_ultima_execucao.txt        # Tokens (TIPO:valor, um por linha)
+    ├── derivacao_ultima_execucao.md      # Passo a passo da pilha LL(1)
+    ├── arvore_ultima_execucao.json       # AST em JSON (consumível por Fase 3)
+    ├── arvore_ultima_execucao.md         # AST em texto legível (markdown)
+    ├── gramatica_dump.md                 # Produções + FIRST/FOLLOW + tabela
+    └── ultima_execucao.s                 # Assembly ARMv7 pronto para o CPUlator
 ```
 
 ---
 
-## Funções Obrigatórias
+## 4. A Linguagem
 
-As cinco funções exigidas pelo enunciado estão em `src/pipeline.py`:
+Toda expressão é escrita em **Notação Polonesa Reversa (RPN)** entre parênteses:
+`(operando1 operando2 operador)`. Um programa **sempre** começa com `(START)`
+e termina com `(END)` — uma instrução por linha.
 
-| Função | Descrição |
+### 4.1. Operadores aritméticos
+
+| Operador | Significado | Exemplo | Resultado |
+|:---:|---|---|---|
+| `+` | Adição | `(3 4 +)` | `7` |
+| `-` | Subtração | `(10 3 -)` | `7` |
+| `*` | Multiplicação | `(4 2.5 *)` | `10.0` |
+| `\|` | Divisão **real** | `(10.0 4.0 \|)` | `2.5` |
+| `/` | Divisão **inteira** | `(10 3 /)` | `3` |
+| `%` | Resto da divisão inteira | `(10 3 %)` | `1` |
+| `^` | Potenciação | `(2 5 ^)` | `32` |
+
+> **Por que `|` para divisão real?** O `/` já estava em uso como divisão inteira
+> desde a Fase 1. Escolhemos `|` como alternativa visual — ambos são "barras".
+
+### 4.2. Operadores relacionais
+
+Retornam `1.0` (verdadeiro) ou `0.0` (falso), usados como condição nas
+estruturas de controle.
+
+| Operador | Significado | Exemplo |
+|:---:|---|---|
+| `>` | maior que | `((VARA) 0 >)` |
+| `<` | menor que | `((X) 10 <)` |
+| `==` | igual | `((FLAG) 1 ==)` |
+| `!=` | diferente | `((CONT) 0 !=)` |
+| `>=` | maior ou igual | `((VARA) 5 >=)` |
+| `<=` | menor ou igual | `((N) 100 <=)` |
+
+### 4.3. Comandos especiais
+
+| Forma | Significado |
 |---|---|
-| `lerArquivo(nomeArquivo, linhas)` | Lê o arquivo, ignora comentários (`#`) e linhas em branco |
-| `parseExpressao(linha, tokens_saida)` | Tokeniza a linha via AFD e constrói a árvore sintática |
-| `executarExpressao(tokens, contexto)` | Processa tokens (delega cálculos ao Assembly) |
-| `gerarAssembly(tokens_por_linha, codigoAssembly)` | Gera o código Assembly ARMv7 completo |
-| `exibirResultados(resultados)` | Exibe os resultados no console |
+| `(V MEM)` | Armazena o valor `V` na memória chamada `MEM` |
+| `(MEM)` | Lê o valor de `MEM` (retorna `0` se não inicializada) |
+| `(N RES)` | Recupera o resultado da expressão `N` linhas atrás |
+
+`MEM` é qualquer sequência de **letras maiúsculas** (`VARA`, `CONT`, `X`, `FLAG`…).
+`RES` é palavra-reservada.
+
+### 4.4. Estruturas de controle (definidas pelo grupo)
+
+Usamos **palavras-chave no final** da expressão (estilo pós-fixado), o que
+preserva o padrão RPN da linguagem e permite decisão com **1 símbolo de lookahead**.
+
+| Estrutura | Sintaxe | Semântica |
+|---|---|---|
+| **IF** | `(COND BLOCO IF)` | Executa `BLOCO` se `COND ≠ 0` |
+| **IFELSE** | `(COND THEN ELSE IFELSE)` | Executa `THEN` se `COND ≠ 0`, senão `ELSE` |
+| **WHILE** | `(COND BLOCO WHILE)` | Repete `BLOCO` enquanto `COND ≠ 0` |
+
+`COND`, `BLOCO`, `THEN` e `ELSE` são **expressões RPN válidas** (inclusive aninhadas).
+
+**Exemplo completo** (retirado de `teste1.txt`):
+
+```
+(START)
+(20 VARA)
+(((VARA) 0 >)  ((VARA) 1 -) WHILE)
+(((VARA) 5 >=) (1 FLAG) (0 FLAG) IFELSE)
+(END)
+```
+
+### 4.5. Exemplo de aninhamento
+
+```
+((A (C D *) +))     → soma A com o produto de C e D
+(((A B %) (D E *) /))  → divide o resto de A%B pelo produto D*E
+```
 
 ---
 
-## Como Executar
+## 5. Como Executar
 
-### Execução principal
+### 5.1. Pré-requisitos
+
+- **Python 3.10+** (nenhuma dependência externa)
+- Para lint: `pip install ruff`
+- Para testes: `pip install pytest` (ou use `python -m pytest`)
+
+### 5.2. Executar o analisador
 
 ```bash
 python main.py teste1.txt
 ```
 
-Os arquivos de saída são gerados automaticamente em `output/`:
-- `output/ultima_execucao.s` — código Assembly ARMv7
-- `output/tokens_ultima_execucao.txt` — tokens no formato `TIPO:valor`
+Saída no console:
 
-Caminhos personalizados:
+```
+Linha 1: operação binária (+)
+Linha 2: operação binária (-)
+...
+Árvore Sintática:
+program
+  binary(+)
+    number(10)
+    number(3)
+  ...
 
-```bash
-python main.py teste2.txt --out output/teste2.s --tokens-out output/tokens_teste2.txt
+Gramática salva em    : output/gramatica_dump.md
+Tokens salvos em      : output/tokens_ultima_execucao.txt
+Derivação salva em    : output/derivacao_ultima_execucao.md
+Árvore salva em       : output/arvore_ultima_execucao.json + arvore_ultima_execucao.md
+Assembly gerado em    : output/ultima_execucao.s
 ```
 
-### Testes automatizados
+### 5.3. Artefatos gerados
+
+| Arquivo | Formato | Conteúdo |
+|---|---|---|
+| `tokens_ultima_execucao.txt` | texto | `linha_N;TIPO:valor,...` |
+| `derivacao_ultima_execucao.md` | markdown | tabela passo a passo da pilha LL(1) |
+| `arvore_ultima_execucao.json` | JSON | AST completa (usável na Fase 3) |
+| `arvore_ultima_execucao.md` | markdown | AST em texto indentado |
+| `gramatica_dump.md` | markdown | produções + FIRST/FOLLOW + tabela LL(1) |
+| `ultima_execucao.s` | Assembly | código ARMv7 para o CPUlator |
+
+### 5.4. Argumentos opcionais
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"
+python main.py teste2.txt \
+  --out output/teste2.s \
+  --tokens-out output/tokens_t2.txt \
+  --arvore-out output/arvore_t2.json \
+  --derivacao-out output/derivacao_t2.md \
+  --gramatica-out output/gramatica_t2.md
 ```
 
-Resultado esperado: **38 testes** (26 léxicos + 12 pipeline), todos passando.
+### 5.5. Rodar os testes automatizados
 
-#### Testes do Lexer (`test_lexer.py` — 26 testes)
+```bash
+python -m pytest tests/ -v
+```
 
-| Categoria | Testes | O que valida |
-|---|---|---|
-| Entradas válidas | 7 | Expressões simples, todos os 7 operadores, expressões aninhadas (dupla e tripla) |
-| Tipos de token | 6 | Tipo correto de cada token (`NUMERO`, `OPERADOR`, `ABRE`, `FECHA`, `IDENT`, `KEYWORD`) |
-| Memória e RES | 3 | Leitura/escrita de memória, keyword `RES` |
-| Números | 2 | Inteiros, decimais grandes (`123456.789`) |
-| Erros léxicos | 8 | Operador inválido (`&`, `!`, `@`, `$`), número malformado (`3.14.5`, `3.`), vírgula decimal, minúsculas, identificador com dígito |
-| Erros estruturais | 4 | Parênteses desbalanceados, `)` extra, `(` faltando |
+Resultado esperado: **37 testes**, todos passando.
 
-#### Testes do Pipeline (`test_pipeline.py` — 12 testes)
+### 5.6. Executar o Assembly no CPUlator
 
-| Categoria | Testes | O que valida |
-|---|---|---|
-| Fluxo completo | 1 | Todas as operações de uma vez — verifica presença das rotinas auxiliares e rótulos no Assembly |
-| Geração Assembly | 3 | Instruções corretas para cada operador (`VADD`, `VSUB`, `VMUL`, `VDIV`, `BL __op_*`), expressões aninhadas, IEEE 754 64 bits (`.double`, `F64`) |
-| `parseExpressao` | 1 | Lista de strings dos tokens retornada corretamente |
-| `executarExpressao` | 4 | Expressão simples, escrita em memória, leitura de memória, referência RES válida |
-| Erro semântico | 1 | `(1 RES)` sem resultados anteriores lança `Erros` |
-| `lerArquivo` | 1 | Ignora comentários (`#`) e linhas em branco |
-
-### Carregar no CPUlator
-
-1. Abrir [cpulator.01xz.net](https://cpulator.01xz.net/?sys=arm-de1soc&d_audio=48000) com **ARMv7 — DE1-SoC**.
-2. Colar o conteúdo de `output/ultima_execucao.s` no editor.
-3. Compilar e executar (`F5`).
-4. Observar o resultado no display **HEX3–HEX0** (valor inteiro truncado do resultado da última expressão com `RES`).
+1. Abrir <https://cpulator.01xz.net/?sys=arm-de1soc>
+2. Colar o conteúdo de `output/ultima_execucao.s` no editor
+3. Pressionar **F7** (Compilar) e depois **F5** (Executar)
+4. O resultado da última expressão aparece no display **HEX3–HEX0**
 
 ---
 
-## Autômato Finito Determinístico (AFD)
+## 6. Gramática LL(1)
 
-O analisador léxico (`lexer_fsm.py`) é implementado como um AFD com as seguintes características:
+Convenção: **minúsculas** = não-terminais · **MAIÚSCULAS** = terminais · `ε` = cadeia vazia
 
-- **5 estados**: `estado_inicial`, `estado_numero`, `estado_numero_decimal`, `estado_identificador`, `estado_barra`
-- **Sem expressões regulares** — cada estado é uma função Python pura que recebe um caractere e o contexto, retornando o próximo estado e se deve avançar o cursor
-- **Motor por dicionário**: mapeia nome do estado → função, consumindo caractere a caractere com mecanismo de avanço/não-avanço
+### 6.1. Regras de Produção
 
-### Tabela de Transições
+| # | Não-Terminal | Produção | Observação |
+|:---:|---|---|---|
+| 00 | `program` | `LPAREN START RPAREN body` | raiz — toda entrada começa com `(START)` |
+| 01 | `body` | `LPAREN body_tail` | consome `(` antes de decidir |
+| 02 | `body_tail` | `END RPAREN` | fim do programa |
+| 03 | `body_tail` | `expr_body RPAREN body` | mais uma instrução + continua |
+| 04 | `expr_body` | `item rest1` | pelo menos 1 item por expressão |
+| 05 | `rest1` | `ε` | expressão de 1 item: `(MEM)` |
+| 06 | `rest1` | `item rest2` | expressão de 2+ itens |
+| 07 | `rest2` | `ε` | — |
+| 08 | `rest2` | `binop` | operador binário aritmético/relacional |
+| 09 | `rest2` | `kw_ctrl3` | keyword com 2 operandos (IF, WHILE) |
+| 10 | `rest2` | `item item_tail` | 3 itens → IFELSE |
+| 11 | `item_tail` | `kw_ctrl4` | keyword com 3 operandos (IFELSE) |
+| 12 | `item` | `NUMERO` | literal numérico |
+| 13 | `item` | `IDENT` | identificador de memória |
+| 14 | `item` | `RES` | palavra-chave RES |
+| 15 | `item` | `LPAREN expr_body RPAREN` | sub-expressão aninhada |
+| 16–22 | `binop` | `+` `-` `*` `/` `\|` `%` `^` | aritméticos |
+| 23–28 | `binop` | `>` `<` `==` `!=` `>=` `<=` | relacionais |
+| 29 | `kw_ctrl3` | `IF` | |
+| 30 | `kw_ctrl3` | `WHILE` | |
+| 31 | `kw_ctrl4` | `IFELSE` | |
 
-| Estado atual | Entrada | Próximo estado | Ação |
-|---|---|---|---|
-| `inicial` | espaço / tab / `\n` | `inicial` | Ignora whitespace |
-| `inicial` | `(` | `inicial` | Emite `PARENTESE_ABRE`, incrementa contador de parênteses |
-| `inicial` | `)` | `inicial` | Emite `PARENTESE_FECHA`, decrementa contador (erro se ≤ 0) |
-| `inicial` | dígito `[0-9]` | `numero` | Inicia buffer numérico |
-| `inicial` | maiúscula `[A-Z]` | `identificador` | Inicia buffer de identificador |
-| `inicial` | `+ - * % ^` | `inicial` | Emite `OPERADOR` |
-| `inicial` | `/` | `barra` | Aguarda possível `//` |
-| `inicial` | `.` | **ERRO** | Ponto sem dígito antes |
-| `inicial` | minúscula `[a-z]` | **ERRO** | Identificadores devem ser maiúsculos |
-| `numero` | dígito | `numero` | Acumula no buffer |
-| `numero` | `.` | `numero_decimal` | Transição para parte decimal |
-| `numero` | letra | **ERRO** | Número malformado (letra após número) |
-| `numero` | outro | `inicial` | Emite `NUMERO`, **não avança** (reprocessa caractere) |
-| `numero_decimal` | dígito | `numero_decimal` | Acumula no buffer |
-| `numero_decimal` | `.` | **ERRO** | Múltiplos pontos decimais |
-| `numero_decimal` | letra | **ERRO** | Número malformado |
-| `numero_decimal` | outro | `inicial` | Emite `NUMERO` (valida que não termina em `.`) |
-| `identificador` | maiúscula | `identificador` | Acumula no buffer |
-| `identificador` | minúscula | **ERRO** | Letra minúscula em identificador |
-| `identificador` | dígito | **ERRO** | Dígito em identificador |
-| `identificador` | outro | `inicial` | Emite `KEYWORD` (se `RES`) ou `IDENTIFICADOR`, **não avança** |
-| `barra` | `/` | `inicial` | Emite `OPERADOR` com valor `//` |
-| `barra` | outro | `inicial` | Emite `OPERADOR` com valor `/`, **não avança** |
+### 6.2. Por que essa gramática é LL(1)?
 
-### Estado de Finalização
+Três decisões de projeto garantem que nunca há conflito:
 
-Ao consumir todos os caracteres, a função `_finalizar()`:
-1. Emite qualquer token pendente no buffer (número, identificador ou `/`)
-2. Verifica se o contador de parênteses é zero — caso contrário, lança `Erros("parênteses desbalanceados")`
+**1. Fatoração à esquerda em `body`**
 
-### Tratamento de Erros Léxicos
+Sem fatoração, `body_tail` teria dois casos começando com `(`:
+`(END)` e `(expressão…)`. Com a regra `body → LPAREN body_tail`,
+consumimos o `(` primeiro e só então olhamos se o próximo token é `END`
+ou início de expressão — 1 símbolo resolve.
 
-O AFD detecta e reporta com posição exata (linha e coluna):
+**2. `rest1` e `rest2` anuláveis apenas quando necessário**
 
-| Erro | Exemplo | Mensagem |
-|---|---|---|
-| Caractere inválido | `(3 2 @)` | `caractere inválido '@'` |
-| Letra minúscula | `(3.0 abc +)` | `identificadores devem usar apenas letras maiúsculas` |
-| Número malformado | `(3.14.5 2 +)` | `múltiplos pontos decimais` |
-| Ponto sem dígito | `(.5 2 +)` | `ponto sem dígito antes` |
-| Número + letra | `(10x 2 +)` | `letra imediatamente após número` |
-| Identificador + dígito | `(10.5 MEM1)` | `identificador contém dígito` |
-| Identificador misto | `(10.5 Mem)` | `contém letra minúscula` |
-| `)` sem `(` | `3 2 +)` | `')' sem '(' correspondente` |
-| `(` sem `)` | `(3 2 +` | `parênteses desbalanceados` |
+`rest1` vai para `ε` somente quando vê `)` (expressão de 1 item, ex: `(MEM)`).
+Em qualquer outro caso, expande para `item rest2`. Sem ambiguidade.
+
+**3. Palavra-chave final para estruturas de controle**
+
+`IF`, `WHILE` e `IFELSE` aparecem **no final** da expressão pós-fixada.
+Quando o parser está em `rest2`, um único lookahead distingue:
+- operador aritmético/relacional → `binop`
+- `IF` ou `WHILE` → `kw_ctrl3`
+- outro item (terá `IFELSE` depois) → `item item_tail`
+
+A própria função `construirGramatica()` detecta conflitos em tempo de execução:
+se uma célula da tabela recebesse 2 produções, lançaria `Erros("Conflito LL(1)")`.
 
 ---
 
-## Detalhes Técnicos
+## 7. Conjuntos FIRST e FOLLOW
 
-### Assembly ARMv7
+> **FIRST(A)** = conjunto de terminais que podem **iniciar** uma derivação a partir de `A`.
+> **FOLLOW(A)** = conjunto de terminais que podem **aparecer imediatamente após** `A`.
+> Ambos são calculados por algoritmo de ponto-fixo em `construirGramatica()`.
 
-O gerador (`armv7_generator.py`) percorre recursivamente cada AST e emite instruções ARMv7 usando uma **estratégia de avaliação baseada em pilha**:
+### FIRST
 
-1. **Operandos** (números, leitura de memória, referência RES): carregados em `d0` via `VLDR.F64`, depois empilhados com `VMOV r4, r5, d0` + `PUSH {r4, r5}`.
-2. **Operações binárias**: desempilham dois operandos (`POP` → `VMOV` para `d0` e `d1`), executam a instrução e reempilham o resultado.
-3. **Escrita em memória**: avalia a sub-expressão, desempilha e armazena via `VSTR.F64` no rótulo `mem_*`.
-4. **Resultado final de cada linha**: desempilhado, armazenado em `resultado_N` e exibido no display HEX.
-
-| Recurso | Implementação |
+| Não-Terminal | FIRST |
 |---|---|
-| Ponto flutuante | IEEE 754 64 bits (`.double`, registradores `d0`–`d7`, FPU VFPv3) |
-| Soma / Subtração / Multiplicação / Divisão | Instruções nativas `VADD.F64`, `VSUB.F64`, `VMUL.F64`, `VDIV.F64` |
-| Divisão inteira `//` | Rotina `__op_idiv` — converte para `S32` via `VCVT`, chama `__sdiv32` (subtração iterativa com tratamento de sinal), converte de volta para `F64` |
-| Módulo `%` | Rotina `__op_mod` — converte para `S32`, calcula `A - (A/B)*B` usando `__sdiv32` + `MUL` + `SUB` |
-| Potência `^` | Rotina `__op_pow` — multiplicação iterativa (`VMUL.F64` em loop) para expoente inteiro positivo; retorna `1.0` se expoente ≤ 0 |
-| Divisão inteira com sinal | Rotina `__sdiv32` — normaliza sinais via `RSB`/`EOR`, loop de subtração, restaura sinal; retorna 0 em divisão por zero |
-| Display HEX | Rotina `__exibir_hex` — decompõe o valor inteiro em até 4 dígitos decimais (unidades, dezenas, centenas, milhares) via divisões por 10, consulta `__hex_tabela` (7 segmentos: `0x3F`=0 … `0x6F`=9), combina com `ORR` e deslocamentos `LSL #8/16/24`, escreve em `0xFF200020`. Números negativos exibem `-` no dígito mais significativo (segmento `g` = `0x40`) |
+| `program` | `{` `(` `}` |
+| `body` | `{` `(` `}` |
+| `body_tail` | `{` `(`, `END`, `IDENT`, `NUMERO`, `RES` `}` |
+| `expr_body` | `{` `(`, `IDENT`, `NUMERO`, `RES` `}` |
+| `item` | `{` `(`, `IDENT`, `NUMERO`, `RES` `}` |
+| `rest1` | `{` `(`, `IDENT`, `NUMERO`, `RES`, `ε` `}` |
+| `rest2` | `{` `(`, `IDENT`, `IF`, `NUMERO`, `RES`, `WHILE`, `!=`, `%`, `*`, `+`, `-`, `/`, `<`, `<=`, `==`, `>`, `>=`, `^`, `\|`, `ε` `}` |
+| `item_tail` | `{` `IFELSE` `}` |
+| `binop` | `{` `!=`, `%`, `*`, `+`, `-`, `/`, `<`, `<=`, `==`, `>`, `>=`, `^`, `\|` `}` |
+| `kw_ctrl3` | `{` `IF`, `WHILE` `}` |
+| `kw_ctrl4` | `{` `IFELSE` `}` |
 
-### Gerenciamento de Dados (`.data`)
+### FOLLOW
 
-| Rótulo | Conteúdo |
+| Não-Terminal | FOLLOW |
 |---|---|
-| `const_N` | Constantes numéricas únicas (`.double`) — deduplicadas pelo gerador |
-| `const_one` | Constante `1.0` usada pela rotina de potência |
-| `mem_*` | Variáveis de memória, inicializadas em `0.0` |
-| `resultado_N` | Resultado de cada linha (N = 0, 1, 2, …) |
-| `__hex_tabela` | 10 bytes com os padrões de 7 segmentos para dígitos 0–9 |
+| `program` | `{` `$` `}` |
+| `body` | `{` `$` `}` |
+| `body_tail` | `{` `$` `}` |
+| `expr_body` | `{` `)` `}` |
+| `item` | `{` `(`, `)`, `IDENT`, `IF`, `IFELSE`, `NUMERO`, `RES`, `WHILE`, `!=`, `%`, `*`, `+`, `-`, `/`, `<`, `<=`, `==`, `>`, `>=`, `^`, `\|` `}` |
+| `rest1` | `{` `)` `}` |
+| `rest2` | `{` `)` `}` |
+| `item_tail` | `{` `)` `}` |
+| `binop` | `{` `)` `}` |
+| `kw_ctrl3` | `{` `)` `}` |
+| `kw_ctrl4` | `{` `)` `}` |
 
-### Formato dos Tokens
+---
 
-Cada linha do arquivo de tokens segue o formato:
+## 8. Tabela de Análise LL(1)
+
+Cada célula `M[A, a]` indica qual produção aplicar quando o **topo da pilha** é o
+não-terminal `A` e o **token corrente** é `a`. Células não listadas = **erro sintático**.
+
+A tabela completa com as 57 entradas é gerada automaticamente a cada execução em
+[`output/gramatica_dump.md`](output/gramatica_dump.md). As entradas mais importantes:
+
+| M\[A, a\] | Produção |
+|---|---|
+| `M[program, (]` | `program → LPAREN START RPAREN body` |
+| `M[body, (]` | `body → LPAREN body_tail` |
+| `M[body_tail, END]` | `body_tail → END RPAREN` |
+| `M[body_tail, ( / NUMERO / IDENT / RES]` | `body_tail → expr_body RPAREN body` |
+| `M[expr_body, ( / NUMERO / IDENT / RES]` | `expr_body → item rest1` |
+| `M[rest1, )]` | `rest1 → ε` |
+| `M[rest1, ( / NUMERO / IDENT / RES]` | `rest1 → item rest2` |
+| `M[rest2, )]` | `rest2 → ε` |
+| `M[rest2, + / - / * / … (operadores)]` | `rest2 → binop` |
+| `M[rest2, IF / WHILE]` | `rest2 → kw_ctrl3` |
+| `M[rest2, ( / NUMERO / IDENT / RES]` | `rest2 → item item_tail` |
+| `M[item_tail, IFELSE]` | `item_tail → kw_ctrl4` |
+| `M[item, NUMERO]` | `item → NUMERO` |
+| `M[item, IDENT]` | `item → IDENT` |
+| `M[item, RES]` | `item → RES` |
+| `M[item, (]` | `item → LPAREN expr_body RPAREN` |
+
+---
+
+## 9. Como o Parser Funciona
+
+### 9.1. O algoritmo de pilha
+
+```python
+gram   = construirGramatica()         # gramática + FIRST/FOLLOW + tabela
+tokens = lerTokens("output/tokens_ultima_execucao.txt")
+result = parsear(tokens, gram)        # derivação LL(1)
+arv    = gerarArvore(result)          # AST semântica
+asm    = gerarAssembly(arv)           # código ARMv7
+```
+
+Internamente, `parsear` mantém:
+- **pilha** inicializada com `["program", "$"]`
+- **buffer de tokens** terminado com `$`
+
+A cada iteração:
+
+```mermaid
+flowchart TD
+    A([início]) --> B{"topo == '$'?"}
+    B -- sim --> C{"token == '$'?"}
+    C -- sim --> OK([aceita ✓])
+    C -- não --> E1(["erro: tokens sobrando"])
+    B -- não --> D{"topo é terminal?"}
+    D -- sim --> E{"casa com\ntoken corrente?"}
+    E -- sim --> F["consome token\ndesempilha topo\nregistra 'Casa: X'"]
+    F --> A
+    E -- não --> E2(["erro sintático"])
+    D -- não --> G["consulta M[topo, token]"]
+    G --> H{"existe\nprodução?"}
+    H -- não --> E3(["erro sintático"])
+    H -- sim --> I["registra 'Expande: A → α'\nempilha α invertido"]
+    I --> A
+
+    classDef err fill:#fee2e2,stroke:#dc2626
+    classDef ok  fill:#dcfce7,stroke:#16a34a
+    class E1,E2,E3 err
+    class OK ok
+```
+
+### 9.2. Exemplo passo a passo
+
+Para `(START) (3 4 +) (END)`:
+
+| Passo | Pilha (topo →) | Token | Ação |
+|:---:|---|---|---|
+| 1 | `program $` | `(` | Expande: `program → LPAREN START RPAREN body` |
+| 2 | `LPAREN START RPAREN body $` | `(` | Casa: `LPAREN` |
+| 3 | `START RPAREN body $` | `START` | Casa: `START` |
+| 4 | `RPAREN body $` | `)` | Casa: `RPAREN` |
+| 5 | `body $` | `(` | Expande: `body → LPAREN body_tail` |
+| 6 | `LPAREN body_tail $` | `(` | Casa: `LPAREN` |
+| 7 | `body_tail $` | `3` | Expande: `body_tail → expr_body RPAREN body` |
+| … | … | … | … |
+
+O passo a passo completo da última execução está em
+[`output/derivacao_ultima_execucao.md`](output/derivacao_ultima_execucao.md).
+
+### 9.3. Da derivação para a AST
+
+A AST **não** é construída durante o parsing — ela é reconstruída depois,
+percorrendo a lista de passos gravada. Isso separa responsabilidades: `parsear()`
+é puro (sem efeitos colaterais), e `gerarArvore()` pode ser testado isoladamente.
+
+---
+
+## 10. A Árvore Sintática (AST)
+
+### 10.1. Tipos de nó
+
+| Tipo | Campos | Representa |
+|---|---|---|
+| `program` | `stmts: [nó, …]` | raiz — lista de instruções do programa |
+| `binary` | `op`, `esq`, `dir` | operação binária aritmética ou relacional |
+| `number` | `valor` | literal numérico (`10`, `3.14`) |
+| `mem_read` | `nome` | leitura de memória: `(MEM)` |
+| `mem_write` | `nome`, `expr` | escrita em memória: `(V MEM)` |
+| `res_ref` | `linhas_atras` | referência a resultado anterior: `(N RES)` |
+| `if` | `cond`, `then_block` | `(COND BLOCO IF)` |
+| `ifelse` | `cond`, `then_block`, `else_block` | `(COND THEN ELSE IFELSE)` |
+| `while` | `cond`, `body` | `(COND BLOCO WHILE)` |
+
+### 10.2. Estrutura em JSON
+
+```json
+{
+  "tipo": "program",
+  "stmts": [
+    { "tipo": "binary", "op": "+",
+      "esq": { "tipo": "number", "valor": 10 },
+      "dir": { "tipo": "number", "valor": 3 } },
+    { "tipo": "while",
+      "cond": { "tipo": "binary", "op": ">",
+                "esq": { "tipo": "mem_read", "nome": "VARA" },
+                "dir": { "tipo": "number", "valor": 0 } },
+      "body": { "tipo": "binary", "op": "-",
+                "esq": { "tipo": "mem_read", "nome": "VARA" },
+                "dir": { "tipo": "number", "valor": 1 } } }
+  ]
+}
+```
+
+O JSON completo da última execução está em
+[`output/arvore_ultima_execucao.json`](output/arvore_ultima_execucao.json).
+
+### 10.3. Árvore do último teste (`teste1.txt`)
 
 ```
-linha_N;TIPO1:valor1,TIPO2:valor2,...
+program
+  binary(+)
+    number(10)
+    number(3)
+  binary(-)
+    number(7.5)
+    number(2.5)
+  binary(*)
+    number(4)
+    number(2.5)
+  binary(|)
+    number(10.0)
+    number(4.0)
+  binary(/)
+    number(10)
+    number(3)
+  binary(%)
+    number(10)
+    number(3)
+  binary(^)
+    number(2)
+    number(5)
+  mem_write(VARA)
+    number(20)
+  binary(|)
+    mem_read(VARA)
+    number(2)
+  res_ref(linhas_atras=2)
+  while
+    cond:
+      binary(>)
+        mem_read(VARA)
+        number(0)
+    body:
+      binary(-)
+        mem_read(VARA)
+        number(1)
+  ifelse
+    cond:
+      binary(>=)
+        mem_read(VARA)
+        number(5)
+    then:
+      mem_write(FLAG)
+        number(1)
+    else:
+      mem_write(FLAG)
+        number(0)
+  binary(==)
+    mem_read(FLAG)
+    number(0)
+  binary(-)
+    binary(+)
+      number(10)
+      number(3)
+    binary(*)
+      number(2)
+      number(4)
 ```
 
-Tipos possíveis: `NUMERO`, `OPERADOR`, `PARENTESE_ABRE`, `PARENTESE_FECHA`, `IDENTIFICADOR`, `KEYWORD`.
+---
+
+## 11. Geração de Assembly
+
+### 11.1. Estratégia geral
+
+A geração percorre a AST **recursivamente**. Todos os valores são tratados como
+`double` IEEE 754 (64 bits) usando os registradores VFP `d0`–`d7`.
+
+Como o ARMv7 não tem `PUSH`/`POP` para registradores VFP diretamente,
+usamos o par `r4:r5` como intermediário:
+
+```asm
+@ empilhar d0:
+VMOV r4, r5, d0
+PUSH {r4, r5}
+
+@ desempilhar para d1:
+POP {r4, r5}
+VMOV d1, r4, r5
+```
+
+### 11.2. Como cada nó é traduzido
+
+| Nó da AST | Assembly gerado |
+|---|---|
+| `number(N)` | `VLDR.F64 d0, =const_N` → empilha |
+| `mem_read(MEM)` | `LDR r0, =mem_MEM` · `VLDR.F64 d0, [r0]` → empilha |
+| `mem_write(MEM, e)` | gera `e` → desempilha → `VSTR.F64 d0, [mem_MEM]` |
+| `res_ref(N)` | `LDR r0, =resultado_(linha-N)` · `VLDR.F64 d0, [r0]` |
+| `binary(+)` | gera esq+dir → `VADD.F64 d0, d0, d1` |
+| `binary(-)` | idem → `VSUB.F64 d0, d0, d1` |
+| `binary(*)` | idem → `VMUL.F64 d0, d0, d1` |
+| `binary(\|)` | idem → `VDIV.F64 d0, d0, d1` (divisão real) |
+| `binary(/)` | idem → chama `__op_idiv` (divisão inteira) |
+| `binary(%)` | idem → chama `__op_mod` |
+| `binary(^)` | idem → chama `__op_pow` (multiplicação iterativa) |
+| `binary(> < == …)` | `VCMP.F64 d0, d1` · `VMRS APSR_nzcv, FPSCR` · desvio condicional → empilha `1.0` ou `0.0` |
+| `if` | gera cond → `VCMP` → `BEQ fim_X` → gera bloco → `fim_X:` |
+| `ifelse` | gera cond → `BEQ else_X` → then → `B fim_X` → `else_X:` → else → `fim_X:` |
+| `while` | `loop_X:` → gera cond → `BEQ fim_X` → bloco → `B loop_X` → `fim_X:` |
+
+### 11.3. Rotinas auxiliares
+
+As operações sem instrução nativa em ARMv7 são implementadas como sub-rotinas:
+
+| Rotina | Função |
+|---|---|
+| `__op_idiv` | divisão inteira: converte `double→int`, divide, volta para `double` |
+| `__op_mod` | resto: divide e subtrai `quociente × divisor` |
+| `__op_pow` | potência com expoente inteiro (laço de multiplicações) |
+| `__sdiv32` | divisão de 32 bits por subtrações (Cortex-A9 não tem `SDIV`) |
+| `__exibir_hex` | exibe inteiro nos 6 displays HEX do DE1-SoC |
+
+---
+
+## 12. Arquivos de Teste
+
+Cada arquivo tem **mais de 10 linhas** e cumpre todos os requisitos do enunciado:
+
+| Requisito | teste1 | teste2 | teste3 |
+|---|:---:|:---:|:---:|
+| Todos os operadores `+ - * \| / % ^` | ✅ | ✅ | ✅ |
+| Comandos `(N RES)`, `(V MEM)`, `(MEM)` | ✅ | ✅ | ✅ |
+| Estrutura de **decisão** (`IF` / `IFELSE`) | ✅ | ✅ | ✅ |
+| Estrutura de **repetição** (`WHILE`) | ✅ | ✅ | ✅ |
+| Literais inteiros, reais e variáveis | ✅ | ✅ | ✅ |
+| Aninhamento profundo | ✅ | ✅ | ✅ |
+
+Para validar o tratamento de erros:
+
+| Arquivo | Erros cobertos |
+|---|---|
+| [`teste_erro_lexico.txt`](teste_erro_lexico.txt) | `&`, `3.14.5`, `.5`, `10x`, `Mem` (minúscula), `=` sozinho, `!` sozinho, `MEM1` (dígito) |
+| [`teste_erro_sintatico.txt`](teste_erro_sintatico.txt) | `(3 2 + 5)`, `(+ 3 2)`, `(IF 3 2)`, parênteses extras, `(1 RES MEM)` |
+
+```bash
+python main.py teste_erro_lexico.txt     # aborta na primeira linha problemática
+python main.py teste_erro_sintatico.txt
+```
+
+Os testes unitários em [`tests/`](tests/) cobrem:
+
+- Tokens léxicos inválidos (`@`, `&`, números malformados)
+- Programas sem `(START)` ou sem `(END)`
+- Estruturas de controle malformadas
+- Aninhamento profundo e expressões vazias
+- Pipeline completo com os 3 arquivos de teste
+
+---
+
+## 13. Tratamento de Erros
+
+Toda mensagem inclui **linha** e **coluna** quando disponível:
+
+| Origem | Exemplo de mensagem |
+|---|---|
+| Lexer | `linha 4, col 7: caractere inválido '@'` |
+| Parser | `linha 6: token inesperado 'IF' — esperado {RPAREN, +, -, …}` |
+| Parser | `programa não inicia com (START)` |
+| Parser | `programa não termina com (END)` |
+| Semântico | `RES inválido: 5 linhas atrás não disponível` |
+
+A classe `Erros` (em [`src/lexer_fsm.py`](src/lexer_fsm.py)) é compartilhada por
+todos os módulos, mantendo o `try/except` em `main.py` simples.
+
+---
+
+## 14. Distribuição do Trabalho
+
+| Aluno | Responsabilidades | Arquivos |
+|---|---|---|
+| **Frederico** (fredfruet) | `construirGramatica`, FIRST/FOLLOW, tabela LL(1), `parsear` | [`src/parser_ll1.py`](src/parser_ll1.py), [`gramatica.md`](gramatica.md), [`tests/test_pipeline.py`](tests/test_pipeline.py) |
+| **Emanuel** (emanuelriceto) | `lerTokens`, novas keywords e relacionais no AFD, testes léxicos | [`src/lexer_fsm.py`](src/lexer_fsm.py), [`src/pipeline.py`](src/pipeline.py), [`tests/test_lexer.py`](tests/test_lexer.py) |
+| **Arthur** (Tuizones) | `gerarArvore`, `gerarAssembly`, `main`, integração end-to-end | [`main.py`](main.py), [`src/armv7_generator.py`](src/armv7_generator.py) |
+
+Cada contribuição está registrada no repositório como **pull request separado**.
 
 
+## 15. Referências
+
+- AHO, A. V.; LAM, M. S.; SETHI, R.; ULLMAN, J. D. **Compiladores: princípios, técnicas e ferramentas**. 2ª ed. Pearson, 2008.
+- ARM Architecture Reference Manual — ARMv7-A and ARMv7-R edition.
+- CPUlator DE1-SoC — <https://cpulator.01xz.net>.

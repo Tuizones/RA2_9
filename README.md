@@ -148,7 +148,7 @@ e termina com `(END)` — uma instrução por linha.
 
 ### 4.1. Operadores aritméticos
 
-| Operador | Significado | Exemplo | Resultado |
+| Operador | Significado | Exemplo | Resultados |
 |:---:|---|---|---|
 | `+` | Adição | `(3 4 +)` | `7` |
 | `-` | Subtração | `(10 3 -)` | `7` |

@@ -6,40 +6,16 @@
       "op": "+",
       "esq": {
         "tipo": "number",
-        "valor": "10"
+        "valor": "1.25"
       },
       "dir": {
         "tipo": "number",
-        "valor": "3"
+        "valor": "3.75"
       }
     },
     {
       "tipo": "binary",
       "op": "-",
-      "esq": {
-        "tipo": "number",
-        "valor": "7.5"
-      },
-      "dir": {
-        "tipo": "number",
-        "valor": "2.5"
-      }
-    },
-    {
-      "tipo": "binary",
-      "op": "*",
-      "esq": {
-        "tipo": "number",
-        "valor": "4"
-      },
-      "dir": {
-        "tipo": "number",
-        "valor": "2.5"
-      }
-    },
-    {
-      "tipo": "binary",
-      "op": "|",
       "esq": {
         "tipo": "number",
         "valor": "10.0"
@@ -51,14 +27,38 @@
     },
     {
       "tipo": "binary",
-      "op": "/",
+      "op": "*",
       "esq": {
         "tipo": "number",
-        "valor": "10"
+        "valor": "2.0"
       },
       "dir": {
         "tipo": "number",
-        "valor": "3"
+        "valor": "3.5"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "|",
+      "esq": {
+        "tipo": "number",
+        "valor": "9.0"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "2.0"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "/",
+      "esq": {
+        "tipo": "number",
+        "valor": "9"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "2"
       }
     },
     {
@@ -66,11 +66,11 @@
       "op": "%",
       "esq": {
         "tipo": "number",
-        "valor": "10"
+        "valor": "9"
       },
       "dir": {
         "tipo": "number",
-        "valor": "3"
+        "valor": "2"
       }
     },
     {
@@ -82,57 +82,85 @@
       },
       "dir": {
         "tipo": "number",
-        "valor": "5"
+        "valor": "8"
       }
     },
     {
       "tipo": "mem_write",
-      "nome": "VARA",
+      "nome": "PI",
       "valor": {
         "tipo": "number",
-        "valor": "20"
+        "valor": "3.1415"
       }
     },
     {
       "tipo": "binary",
-      "op": "|",
+      "op": "*",
       "esq": {
         "tipo": "mem_read",
-        "nome": "VARA"
+        "nome": "PI"
       },
       "dir": {
         "tipo": "number",
-        "valor": "2"
+        "valor": "2.0"
       }
     },
     {
       "tipo": "res_ref",
-      "linhas_atras": 2
+      "linhas_atras": 1
     },
     {
-      "tipo": "while",
+      "tipo": "mem_write",
+      "nome": "RAIO",
+      "valor": {
+        "tipo": "mem_read",
+        "nome": "PI"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "*",
+      "esq": {
+        "tipo": "binary",
+        "op": "*",
+        "esq": {
+          "tipo": "mem_read",
+          "nome": "RAIO"
+        },
+        "dir": {
+          "tipo": "mem_read",
+          "nome": "PI"
+        }
+      },
+      "dir": {
+        "tipo": "mem_read",
+        "nome": "RAIO"
+      }
+    },
+    {
+      "tipo": "if",
       "cond": {
         "tipo": "binary",
         "op": ">",
         "esq": {
           "tipo": "mem_read",
-          "nome": "VARA"
+          "nome": "RAIO"
         },
         "dir": {
           "tipo": "number",
-          "valor": "0"
+          "valor": "0.0"
         }
       },
-      "body": {
+      "then_block": {
         "tipo": "binary",
-        "op": "-",
+        "op": "|",
         "esq": {
           "tipo": "mem_read",
-          "nome": "VARA"
+          "nome": "RAIO"
         },
         "dir": {
           "tipo": "number",
-          "valor": "1"
+          "valor": "0.5"
         }
       }
     },
@@ -140,19 +168,19 @@
       "tipo": "ifelse",
       "cond": {
         "tipo": "binary",
-        "op": ">=",
+        "op": ">",
         "esq": {
           "tipo": "mem_read",
-          "nome": "VARA"
+          "nome": "PI"
         },
         "dir": {
           "tipo": "number",
-          "valor": "5"
+          "valor": "3.0"
         }
       },
       "then_block": {
         "tipo": "mem_write",
-        "nome": "FLAG",
+        "nome": "MAIOR",
         "valor": {
           "tipo": "number",
           "valor": "1"
@@ -160,7 +188,7 @@
       },
       "else_block": {
         "tipo": "mem_write",
-        "nome": "FLAG",
+        "nome": "MAIOR",
         "valor": {
           "tipo": "number",
           "valor": "0"
@@ -168,42 +196,33 @@
       }
     },
     {
-      "tipo": "binary",
-      "op": "==",
-      "esq": {
-        "tipo": "mem_read",
-        "nome": "FLAG"
-      },
-      "dir": {
-        "tipo": "number",
-        "valor": "0"
-      }
-    },
-    {
-      "tipo": "binary",
-      "op": "-",
-      "esq": {
+      "tipo": "while",
+      "cond": {
         "tipo": "binary",
-        "op": "+",
+        "op": "!=",
         "esq": {
-          "tipo": "number",
-          "valor": "10"
+          "tipo": "mem_read",
+          "nome": "MAIOR"
         },
         "dir": {
           "tipo": "number",
-          "valor": "3"
+          "valor": "0"
         }
       },
-      "dir": {
-        "tipo": "binary",
-        "op": "*",
-        "esq": {
-          "tipo": "number",
-          "valor": "2"
-        },
-        "dir": {
-          "tipo": "number",
-          "valor": "4"
+      "body": {
+        "tipo": "mem_write",
+        "nome": "MAIOR",
+        "valor": {
+          "tipo": "binary",
+          "op": "-",
+          "esq": {
+            "tipo": "mem_read",
+            "nome": "MAIOR"
+          },
+          "dir": {
+            "tipo": "number",
+            "valor": "1"
+          }
         }
       }
     }

@@ -58,7 +58,7 @@ _start:
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
-    LDR r0, =const_3
+    LDR r0, =const_5
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
@@ -78,11 +78,11 @@ _start:
     VMOV r0, s0
     BL __exibir_hex
     @ Expressão 4
-    LDR r0, =const_5
+    LDR r0, =const_6
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
-    LDR r0, =const_6
+    LDR r0, =const_4
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
@@ -102,11 +102,11 @@ _start:
     VMOV r0, s0
     BL __exibir_hex
     @ Expressão 5
-    LDR r0, =const_0
+    LDR r0, =const_7
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
-    LDR r0, =const_1
+    LDR r0, =const_8
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
@@ -126,11 +126,11 @@ _start:
     VMOV r0, s0
     BL __exibir_hex
     @ Expressão 6
-    LDR r0, =const_0
+    LDR r0, =const_7
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
-    LDR r0, =const_1
+    LDR r0, =const_8
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
@@ -150,11 +150,11 @@ _start:
     VMOV r0, s0
     BL __exibir_hex
     @ Expressão 7
-    LDR r0, =const_7
+    LDR r0, =const_8
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
-    LDR r0, =const_8
+    LDR r0, =const_9
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
@@ -174,13 +174,13 @@ _start:
     VMOV r0, s0
     BL __exibir_hex
     @ Expressão 8
-    LDR r0, =const_9
+    LDR r0, =const_10
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
     POP {r4, r5}
     VMOV d0, r4, r5
-    LDR r0, =mem_vara
+    LDR r0, =mem_pi
     VSTR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
@@ -193,219 +193,7 @@ _start:
     VMOV r0, s0
     BL __exibir_hex
     @ Expressão 9
-    LDR r0, =mem_vara
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_7
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d1, r4, r5
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    VDIV.F64 d0, d0, d1
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =resultado_8
-    VSTR.F64 d0, [r0]
-    @ Exibir resultado 9 nos HEX displays
-    VCVT.S32.F64 s0, d0
-    VMOV r0, s0
-    BL __exibir_hex
-    @ Expressão 10
-    LDR r0, =resultado_7
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =resultado_9
-    VSTR.F64 d0, [r0]
-    @ Exibir resultado 10 nos HEX displays
-    VCVT.S32.F64 s0, d0
-    VMOV r0, s0
-    BL __exibir_hex
-    @ Expressão 11
-L_while_i_1:
-    LDR r0, =mem_vara
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_10
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d1, r4, r5
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    VCMP.F64 d0, d1
-    VMRS APSR_nzcv, FPSCR
-    BGT L_cmp_t_3
-    LDR r0, =const_zero
-    VLDR.F64 d0, [r0]
-    B L_cmp_e_4
-L_cmp_t_3:
-    LDR r0, =const_one
-    VLDR.F64 d0, [r0]
-L_cmp_e_4:
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =const_zero
-    VLDR.F64 d1, [r0]
-    VCMP.F64 d0, d1
-    VMRS APSR_nzcv, FPSCR
-    BEQ L_while_f_2
-    LDR r0, =mem_vara
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_11
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d1, r4, r5
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    VSUB.F64 d0, d0, d1
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    B L_while_i_1
-L_while_f_2:
-    LDR r0, =const_zero
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =resultado_10
-    VSTR.F64 d0, [r0]
-    @ Exibir resultado 11 nos HEX displays
-    VCVT.S32.F64 s0, d0
-    VMOV r0, s0
-    BL __exibir_hex
-    @ Expressão 12
-    LDR r0, =mem_vara
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_8
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d1, r4, r5
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    VCMP.F64 d0, d1
-    VMRS APSR_nzcv, FPSCR
-    BGE L_cmp_t_7
-    LDR r0, =const_zero
-    VLDR.F64 d0, [r0]
-    B L_cmp_e_8
-L_cmp_t_7:
-    LDR r0, =const_one
-    VLDR.F64 d0, [r0]
-L_cmp_e_8:
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =const_zero
-    VLDR.F64 d1, [r0]
-    VCMP.F64 d0, d1
-    VMRS APSR_nzcv, FPSCR
-    BEQ L_else_5
-    LDR r0, =const_11
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =mem_flag
-    VSTR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    B L_ife_fim_6
-L_else_5:
-    LDR r0, =const_10
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =mem_flag
-    VSTR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-L_ife_fim_6:
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =resultado_11
-    VSTR.F64 d0, [r0]
-    @ Exibir resultado 12 nos HEX displays
-    VCVT.S32.F64 s0, d0
-    VMOV r0, s0
-    BL __exibir_hex
-    @ Expressão 13
-    LDR r0, =mem_flag
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_10
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d1, r4, r5
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    VCMP.F64 d0, d1
-    VMRS APSR_nzcv, FPSCR
-    BEQ L_cmp_t_9
-    LDR r0, =const_zero
-    VLDR.F64 d0, [r0]
-    B L_cmp_e_10
-L_cmp_t_9:
-    LDR r0, =const_one
-    VLDR.F64 d0, [r0]
-L_cmp_e_10:
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    LDR r0, =resultado_12
-    VSTR.F64 d0, [r0]
-    @ Exibir resultado 13 nos HEX displays
-    VCVT.S32.F64 s0, d0
-    VMOV r0, s0
-    BL __exibir_hex
-    @ Expressão 14
-    LDR r0, =const_0
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_1
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d1, r4, r5
-    POP {r4, r5}
-    VMOV d0, r4, r5
-    VADD.F64 d0, d0, d1
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    LDR r0, =const_7
+    LDR r0, =mem_pi
     VLDR.F64 d0, [r0]
     VMOV r4, r5, d0
     PUSH {r4, r5}
@@ -421,6 +209,247 @@ L_cmp_e_10:
     VMOV r4, r5, d0
     PUSH {r4, r5}
     POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =resultado_8
+    VSTR.F64 d0, [r0]
+    @ Exibir resultado 9 nos HEX displays
+    VCVT.S32.F64 s0, d0
+    VMOV r0, s0
+    BL __exibir_hex
+    @ Expressão 10
+    LDR r0, =resultado_8
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =resultado_9
+    VSTR.F64 d0, [r0]
+    @ Exibir resultado 10 nos HEX displays
+    VCVT.S32.F64 s0, d0
+    VMOV r0, s0
+    BL __exibir_hex
+    @ Expressão 11
+    LDR r0, =mem_pi
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =mem_raio
+    VSTR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =resultado_10
+    VSTR.F64 d0, [r0]
+    @ Exibir resultado 11 nos HEX displays
+    VCVT.S32.F64 s0, d0
+    VMOV r0, s0
+    BL __exibir_hex
+    @ Expressão 12
+    LDR r0, =mem_raio
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    LDR r0, =mem_pi
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d1, r4, r5
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    VMUL.F64 d0, d0, d1
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    LDR r0, =mem_raio
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d1, r4, r5
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    VMUL.F64 d0, d0, d1
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =resultado_11
+    VSTR.F64 d0, [r0]
+    @ Exibir resultado 12 nos HEX displays
+    VCVT.S32.F64 s0, d0
+    VMOV r0, s0
+    BL __exibir_hex
+    @ Expressão 13
+    LDR r0, =mem_raio
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    LDR r0, =const_11
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d1, r4, r5
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    VCMP.F64 d0, d1
+    VMRS APSR_nzcv, FPSCR
+    BGT L_cmp_t_2
+    LDR r0, =const_zero
+    VLDR.F64 d0, [r0]
+    B L_cmp_e_3
+L_cmp_t_2:
+    LDR r0, =const_one
+    VLDR.F64 d0, [r0]
+L_cmp_e_3:
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =const_zero
+    VLDR.F64 d1, [r0]
+    VCMP.F64 d0, d1
+    VMRS APSR_nzcv, FPSCR
+    BEQ L_if_fim_1
+    LDR r0, =mem_raio
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    LDR r0, =const_12
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d1, r4, r5
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    VDIV.F64 d0, d0, d1
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+L_if_fim_1:
+    LDR r0, =const_zero
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =resultado_12
+    VSTR.F64 d0, [r0]
+    @ Exibir resultado 13 nos HEX displays
+    VCVT.S32.F64 s0, d0
+    VMOV r0, s0
+    BL __exibir_hex
+    @ Expressão 14
+    LDR r0, =mem_pi
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    LDR r0, =const_13
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d1, r4, r5
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    VCMP.F64 d0, d1
+    VMRS APSR_nzcv, FPSCR
+    BGT L_cmp_t_6
+    LDR r0, =const_zero
+    VLDR.F64 d0, [r0]
+    B L_cmp_e_7
+L_cmp_t_6:
+    LDR r0, =const_one
+    VLDR.F64 d0, [r0]
+L_cmp_e_7:
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =const_zero
+    VLDR.F64 d1, [r0]
+    VCMP.F64 d0, d1
+    VMRS APSR_nzcv, FPSCR
+    BEQ L_else_4
+    LDR r0, =const_14
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =mem_maior
+    VSTR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    B L_ife_fim_5
+L_else_4:
+    LDR r0, =const_15
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =mem_maior
+    VSTR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+L_ife_fim_5:
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =resultado_13
+    VSTR.F64 d0, [r0]
+    @ Exibir resultado 14 nos HEX displays
+    VCVT.S32.F64 s0, d0
+    VMOV r0, s0
+    BL __exibir_hex
+    @ Expressão 15
+L_while_i_8:
+    LDR r0, =mem_maior
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    LDR r0, =const_15
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d1, r4, r5
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    VCMP.F64 d0, d1
+    VMRS APSR_nzcv, FPSCR
+    BNE L_cmp_t_10
+    LDR r0, =const_zero
+    VLDR.F64 d0, [r0]
+    B L_cmp_e_11
+L_cmp_t_10:
+    LDR r0, =const_one
+    VLDR.F64 d0, [r0]
+L_cmp_e_11:
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =const_zero
+    VLDR.F64 d1, [r0]
+    VCMP.F64 d0, d1
+    VMRS APSR_nzcv, FPSCR
+    BEQ L_while_f_9
+    LDR r0, =mem_maior
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    LDR r0, =const_14
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
     VMOV d1, r4, r5
     POP {r4, r5}
     VMOV d0, r4, r5
@@ -429,9 +458,23 @@ L_cmp_e_10:
     PUSH {r4, r5}
     POP {r4, r5}
     VMOV d0, r4, r5
-    LDR r0, =resultado_13
+    LDR r0, =mem_maior
     VSTR.F64 d0, [r0]
-    @ Exibir resultado 14 nos HEX displays
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    B L_while_i_8
+L_while_f_9:
+    LDR r0, =const_zero
+    VLDR.F64 d0, [r0]
+    VMOV r4, r5, d0
+    PUSH {r4, r5}
+    POP {r4, r5}
+    VMOV d0, r4, r5
+    LDR r0, =resultado_14
+    VSTR.F64 d0, [r0]
+    @ Exibir resultado 15 nos HEX displays
     VCVT.S32.F64 s0, d0
     VMOV r0, s0
     BL __exibir_hex
@@ -571,22 +614,27 @@ __udiv_simples_done:
     BX lr
 
 .data
-const_0: .double 10
-const_1: .double 3
-const_2: .double 7.5
-const_3: .double 2.5
-const_4: .double 4
-const_5: .double 10.0
-const_6: .double 4.0
-const_7: .double 2
-const_8: .double 5
-const_9: .double 20
-const_10: .double 0
-const_11: .double 1
+const_0: .double 1.25
+const_1: .double 3.75
+const_2: .double 10.0
+const_3: .double 4.0
+const_4: .double 2.0
+const_5: .double 3.5
+const_6: .double 9.0
+const_7: .double 9
+const_8: .double 2
+const_9: .double 8
+const_10: .double 3.1415
+const_11: .double 0.0
+const_12: .double 0.5
+const_13: .double 3.0
+const_14: .double 1
+const_15: .double 0
 const_zero: .double 0.0
 const_one:  .double 1.0
-mem_flag: .double 0.0
-mem_vara: .double 0.0
+mem_maior: .double 0.0
+mem_pi: .double 0.0
+mem_raio: .double 0.0
 resultado_0: .double 0.0
 resultado_1: .double 0.0
 resultado_2: .double 0.0
@@ -601,6 +649,7 @@ resultado_10: .double 0.0
 resultado_11: .double 0.0
 resultado_12: .double 0.0
 resultado_13: .double 0.0
+resultado_14: .double 0.0
 
 @ Tabela 7-segmentos (0-9) para display HEX
 __hex_tabela:

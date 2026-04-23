@@ -21,38 +21,38 @@ Para cada regra de produção **A → α** na gramática:
 
 | # | Não-Terminal | Produção |
 |---|---|---|
-| 0 | program | LPAREN START RPAREN body |
-| 1 | body | LPAREN body_tail |
-| 2 | body_tail | END RPAREN |
-| 3 | body_tail | expr_body RPAREN body |
-| 4 | expr_body | item rest1 |
-| 5 | rest1 | ε |
-| 6 | rest1 | item rest2 |
-| 7 | rest2 | ε |
-| 8 | rest2 | binop |
-| 9 | rest2 | kw_ctrl3 |
-| 10 | rest2 | item item_tail |
-| 11 | item_tail | kw_ctrl4 |
-| 12 | item | NUMERO |
-| 13 | item | IDENT |
-| 14 | item | RES |
-| 15 | item | LPAREN expr_body RPAREN |
-| 16 | binop | + |
-| 17 | binop | - |
-| 18 | binop | * |
-| 19 | binop | / |
-| 20 | binop | | |
-| 21 | binop | % |
-| 22 | binop | ^ |
-| 23 | binop | > |
-| 24 | binop | < |
-| 25 | binop | == |
-| 26 | binop | != |
-| 27 | binop | >= |
-| 28 | binop | <= |
-| 29 | kw_ctrl3 | IF |
-| 30 | kw_ctrl3 | WHILE |
-| 31 | kw_ctrl4 | IFELSE |
+| 0 | PROGRAM | ( start ) BODY |
+| 1 | BODY | ( BODY_TAIL |
+| 2 | BODY_TAIL | end ) |
+| 3 | BODY_TAIL | EXPR_BODY ) BODY |
+| 4 | EXPR_BODY | ITEM REST1 |
+| 5 | REST1 | ε |
+| 6 | REST1 | ITEM REST2 |
+| 7 | REST2 | ε |
+| 8 | REST2 | BINOP |
+| 9 | REST2 | KW_CTRL3 |
+| 10 | REST2 | ITEM ITEM_TAIL |
+| 11 | ITEM_TAIL | KW_CTRL4 |
+| 12 | ITEM | numero |
+| 13 | ITEM | ident |
+| 14 | ITEM | res |
+| 15 | ITEM | ( EXPR_BODY ) |
+| 16 | BINOP | + |
+| 17 | BINOP | - |
+| 18 | BINOP | * |
+| 19 | BINOP | / |
+| 20 | BINOP | | |
+| 21 | BINOP | % |
+| 22 | BINOP | ^ |
+| 23 | BINOP | > |
+| 24 | BINOP | < |
+| 25 | BINOP | == |
+| 26 | BINOP | != |
+| 27 | BINOP | >= |
+| 28 | BINOP | <= |
+| 29 | KW_CTRL3 | if |
+| 30 | KW_CTRL3 | while |
+| 31 | KW_CTRL4 | ifelse |
 
 ## 2. Conjuntos FIRST
 
@@ -61,17 +61,17 @@ Se A pode derivar ε, então ε ∈ FIRST(A).
 
 | Não-Terminal | FIRST |
 |---|---|
-| binop | { !=, %, *, +, -, /, <, <=, ==, >, >=, ^, | } |
-| body | { LPAREN } |
-| body_tail | { END, IDENT, LPAREN, NUMERO, RES } |
-| expr_body | { IDENT, LPAREN, NUMERO, RES } |
-| item | { IDENT, LPAREN, NUMERO, RES } |
-| item_tail | { IFELSE } |
-| kw_ctrl3 | { IF, WHILE } |
-| kw_ctrl4 | { IFELSE } |
-| program | { LPAREN } |
-| rest1 | { IDENT, LPAREN, NUMERO, RES, ε } |
-| rest2 | { !=, %, *, +, -, /, <, <=, ==, >, >=, IDENT, IF, LPAREN, NUMERO, RES, WHILE, ^, |, ε } |
+| BINOP | { !=, %, *, +, -, /, <, <=, ==, >, >=, ^, | } |
+| BODY | { ( } |
+| BODY_TAIL | { (, end, ident, numero, res } |
+| EXPR_BODY | { (, ident, numero, res } |
+| ITEM | { (, ident, numero, res } |
+| ITEM_TAIL | { ifelse } |
+| KW_CTRL3 | { if, while } |
+| KW_CTRL4 | { ifelse } |
+| PROGRAM | { ( } |
+| REST1 | { (, ident, numero, res, ε } |
+| REST2 | { !=, %, (, *, +, -, /, <, <=, ==, >, >=, ^, ident, if, numero, res, while, |, ε } |
 
 ## 3. Conjuntos FOLLOW
 
@@ -80,17 +80,17 @@ $ ∈ FOLLOW(símbolo inicial) sempre. ε nunca pertence a FOLLOW.
 
 | Não-Terminal | FOLLOW |
 |---|---|
-| binop | { RPAREN } |
-| body | { $ } |
-| body_tail | { $ } |
-| expr_body | { RPAREN } |
-| item | { !=, %, *, +, -, /, <, <=, ==, >, >=, IDENT, IF, IFELSE, LPAREN, NUMERO, RES, RPAREN, WHILE, ^, | } |
-| item_tail | { RPAREN } |
-| kw_ctrl3 | { RPAREN } |
-| kw_ctrl4 | { RPAREN } |
-| program | { $ } |
-| rest1 | { RPAREN } |
-| rest2 | { RPAREN } |
+| BINOP | { ) } |
+| BODY | { $ } |
+| BODY_TAIL | { $ } |
+| EXPR_BODY | { ) } |
+| ITEM | { !=, %, (, ), *, +, -, /, <, <=, ==, >, >=, ^, ident, if, ifelse, numero, res, while, | } |
+| ITEM_TAIL | { ) } |
+| KW_CTRL3 | { ) } |
+| KW_CTRL4 | { ) } |
+| PROGRAM | { $ } |
+| REST1 | { ) } |
+| REST2 | { ) } |
 
 ## 4. Tabela de Análise LL(1) — Formato Plano
 
@@ -99,87 +99,81 @@ Entradas ausentes = erro sintático.
 
 | Não-Terminal (A) | Terminal (a) | Produção |
 |---|---|---|
-| binop | != | #26: binop → != |
-| binop | % | #21: binop → % |
-| binop | * | #18: binop → * |
-| binop | + | #16: binop → + |
-| binop | - | #17: binop → - |
-| binop | / | #19: binop → / |
-| binop | < | #24: binop → < |
-| binop | <= | #28: binop → <= |
-| binop | == | #25: binop → == |
-| binop | > | #23: binop → > |
-| binop | >= | #27: binop → >= |
-| binop | ^ | #22: binop → ^ |
-| binop | | | #20: binop → | |
-| body | LPAREN | #1: body → LPAREN body_tail |
-| body_tail | END | #2: body_tail → END RPAREN |
-| body_tail | IDENT | #3: body_tail → expr_body RPAREN body |
-| body_tail | LPAREN | #3: body_tail → expr_body RPAREN body |
-| body_tail | NUMERO | #3: body_tail → expr_body RPAREN body |
-| body_tail | RES | #3: body_tail → expr_body RPAREN body |
-| expr_body | IDENT | #4: expr_body → item rest1 |
-| expr_body | LPAREN | #4: expr_body → item rest1 |
-| expr_body | NUMERO | #4: expr_body → item rest1 |
-| expr_body | RES | #4: expr_body → item rest1 |
-| item | IDENT | #13: item → IDENT |
-| item | LPAREN | #15: item → LPAREN expr_body RPAREN |
-| item | NUMERO | #12: item → NUMERO |
-| item | RES | #14: item → RES |
-| item_tail | IFELSE | #11: item_tail → kw_ctrl4 |
-| kw_ctrl3 | IF | #29: kw_ctrl3 → IF |
-| kw_ctrl3 | WHILE | #30: kw_ctrl3 → WHILE |
-| kw_ctrl4 | IFELSE | #31: kw_ctrl4 → IFELSE |
-| program | LPAREN | #0: program → LPAREN START RPAREN body |
-| rest1 | IDENT | #6: rest1 → item rest2 |
-| rest1 | LPAREN | #6: rest1 → item rest2 |
-| rest1 | NUMERO | #6: rest1 → item rest2 |
-| rest1 | RES | #6: rest1 → item rest2 |
-| rest1 | RPAREN | #5: rest1 → ε |
-| rest2 | != | #8: rest2 → binop |
-| rest2 | % | #8: rest2 → binop |
-| rest2 | * | #8: rest2 → binop |
-| rest2 | + | #8: rest2 → binop |
-| rest2 | - | #8: rest2 → binop |
-| rest2 | / | #8: rest2 → binop |
-| rest2 | < | #8: rest2 → binop |
-| rest2 | <= | #8: rest2 → binop |
-| rest2 | == | #8: rest2 → binop |
-| rest2 | > | #8: rest2 → binop |
-| rest2 | >= | #8: rest2 → binop |
-| rest2 | IDENT | #10: rest2 → item item_tail |
-| rest2 | IF | #9: rest2 → kw_ctrl3 |
-| rest2 | LPAREN | #10: rest2 → item item_tail |
-| rest2 | NUMERO | #10: rest2 → item item_tail |
-| rest2 | RES | #10: rest2 → item item_tail |
-| rest2 | RPAREN | #7: rest2 → ε |
-| rest2 | WHILE | #9: rest2 → kw_ctrl3 |
-| rest2 | ^ | #8: rest2 → binop |
-| rest2 | | | #8: rest2 → binop |
+| BINOP | != | #26: BINOP → != |
+| BINOP | % | #21: BINOP → % |
+| BINOP | * | #18: BINOP → * |
+| BINOP | + | #16: BINOP → + |
+| BINOP | - | #17: BINOP → - |
+| BINOP | / | #19: BINOP → / |
+| BINOP | < | #24: BINOP → < |
+| BINOP | <= | #28: BINOP → <= |
+| BINOP | == | #25: BINOP → == |
+| BINOP | > | #23: BINOP → > |
+| BINOP | >= | #27: BINOP → >= |
+| BINOP | ^ | #22: BINOP → ^ |
+| BINOP | | | #20: BINOP → | |
+| BODY | ( | #1: BODY → ( BODY_TAIL |
+| BODY_TAIL | ( | #3: BODY_TAIL → EXPR_BODY ) BODY |
+| BODY_TAIL | end | #2: BODY_TAIL → end ) |
+| BODY_TAIL | ident | #3: BODY_TAIL → EXPR_BODY ) BODY |
+| BODY_TAIL | numero | #3: BODY_TAIL → EXPR_BODY ) BODY |
+| BODY_TAIL | res | #3: BODY_TAIL → EXPR_BODY ) BODY |
+| EXPR_BODY | ( | #4: EXPR_BODY → ITEM REST1 |
+| EXPR_BODY | ident | #4: EXPR_BODY → ITEM REST1 |
+| EXPR_BODY | numero | #4: EXPR_BODY → ITEM REST1 |
+| EXPR_BODY | res | #4: EXPR_BODY → ITEM REST1 |
+| ITEM | ( | #15: ITEM → ( EXPR_BODY ) |
+| ITEM | ident | #13: ITEM → ident |
+| ITEM | numero | #12: ITEM → numero |
+| ITEM | res | #14: ITEM → res |
+| ITEM_TAIL | ifelse | #11: ITEM_TAIL → KW_CTRL4 |
+| KW_CTRL3 | if | #29: KW_CTRL3 → if |
+| KW_CTRL3 | while | #30: KW_CTRL3 → while |
+| KW_CTRL4 | ifelse | #31: KW_CTRL4 → ifelse |
+| PROGRAM | ( | #0: PROGRAM → ( start ) BODY |
+| REST1 | ( | #6: REST1 → ITEM REST2 |
+| REST1 | ) | #5: REST1 → ε |
+| REST1 | ident | #6: REST1 → ITEM REST2 |
+| REST1 | numero | #6: REST1 → ITEM REST2 |
+| REST1 | res | #6: REST1 → ITEM REST2 |
+| REST2 | != | #8: REST2 → BINOP |
+| REST2 | % | #8: REST2 → BINOP |
+| REST2 | ( | #10: REST2 → ITEM ITEM_TAIL |
+| REST2 | ) | #7: REST2 → ε |
+| REST2 | * | #8: REST2 → BINOP |
+| REST2 | + | #8: REST2 → BINOP |
+| REST2 | - | #8: REST2 → BINOP |
+| REST2 | / | #8: REST2 → BINOP |
+| REST2 | < | #8: REST2 → BINOP |
+| REST2 | <= | #8: REST2 → BINOP |
+| REST2 | == | #8: REST2 → BINOP |
+| REST2 | > | #8: REST2 → BINOP |
+| REST2 | >= | #8: REST2 → BINOP |
+| REST2 | ^ | #8: REST2 → BINOP |
+| REST2 | ident | #10: REST2 → ITEM ITEM_TAIL |
+| REST2 | if | #9: REST2 → KW_CTRL3 |
+| REST2 | numero | #10: REST2 → ITEM ITEM_TAIL |
+| REST2 | res | #10: REST2 → ITEM ITEM_TAIL |
+| REST2 | while | #9: REST2 → KW_CTRL3 |
+| REST2 | | | #8: REST2 → BINOP |
 
 ## 5. Tabela de Análise LL(1) — Formato Matricial M[A, a]
 
 Número na célula = índice da produção (seção 1). `—` = erro sintático.
 
-### Grupo A — Tokens, palavras-chave e $
-
-| NT \ T | END | IDENT | IF | IFELSE | LPAREN | NUMERO | RES | RPAREN | WHILE |
-|---|---|---|---|---|---|---|---|---|---|
-| `program` | — | — | — | — | **#0** | — | — | — | — |
-| `body` | — | — | — | — | **#1** | — | — | — | — |
-| `body_tail` | **#2** | **#3** | — | — | **#3** | **#3** | **#3** | — | — |
-| `expr_body` | — | **#4** | — | — | **#4** | **#4** | **#4** | — | — |
-| `rest1` | — | **#6** | — | — | **#6** | **#6** | **#6** | **#5** | — |
-| `rest2` | — | **#10** | **#9** | — | **#10** | **#10** | **#10** | **#7** | **#9** |
-| `item_tail` | — | — | — | **#11** | — | — | — | — | — |
-| `item` | — | **#13** | — | — | **#15** | **#12** | **#14** | — | — |
-| `kw_ctrl3` | — | — | **#29** | — | — | — | — | — | **#30** |
-| `kw_ctrl4` | — | — | — | **#31** | — | — | — | — | — |
-
 ### Grupo B — Operadores
 
-| NT \ T | != | % | * | + | - | / | < | <= | == | > | >= | ^ | | |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `rest2` | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** |
-| `binop` | **#26** | **#21** | **#18** | **#16** | **#17** | **#19** | **#24** | **#28** | **#25** | **#23** | **#27** | **#22** | **#20** |
+| NT \ T | != | % | ( | ) | * | + | - | / | < | <= | == | > | >= | ^ | end | ident | if | ifelse | numero | res | while | | |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `PROGRAM` | — | — | **#0** | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `BODY` | — | — | **#1** | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `BODY_TAIL` | — | — | **#3** | — | — | — | — | — | — | — | — | — | — | — | **#2** | **#3** | — | — | **#3** | **#3** | — | — |
+| `EXPR_BODY` | — | — | **#4** | — | — | — | — | — | — | — | — | — | — | — | — | **#4** | — | — | **#4** | **#4** | — | — |
+| `REST1` | — | — | **#6** | **#5** | — | — | — | — | — | — | — | — | — | — | — | **#6** | — | — | **#6** | **#6** | — | — |
+| `REST2` | **#8** | **#8** | **#10** | **#7** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | — | **#10** | **#9** | — | **#10** | **#10** | **#9** | **#8** |
+| `ITEM_TAIL` | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | **#11** | — | — | — | — |
+| `ITEM` | — | — | **#15** | — | — | — | — | — | — | — | — | — | — | — | — | **#13** | — | — | **#12** | **#14** | — | — |
+| `BINOP` | **#26** | **#21** | — | — | **#18** | **#16** | **#17** | **#19** | **#24** | **#28** | **#25** | **#23** | **#27** | **#22** | — | — | — | — | — | — | — | **#20** |
+| `KW_CTRL3` | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | **#29** | — | — | — | **#30** | — |
+| `KW_CTRL4` | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | **#31** | — | — | — | — |
 

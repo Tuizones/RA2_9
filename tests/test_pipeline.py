@@ -37,21 +37,21 @@ def _programa(linhas):
 class TestGramaticaLL1(unittest.TestCase):
     def test_construirGramatica_sem_conflitos(self):
         g = construirGramatica()
-        self.assertIn("program", g["nao_terminais"])
+        self.assertIn("PROGRAM", g["nao_terminais"])
         self.assertGreater(len(g["tabela"]), 0)
-        # program é o símbolo inicial
-        self.assertEqual(g["inicial"], "program")
+        # PROGRAM é o símbolo inicial
+        self.assertEqual(g["inicial"], "PROGRAM")
 
     def test_first_follow_contem_basicos(self):
         g = construirGramatica()
-        self.assertIn("LPAREN", g["first"]["program"])
-        self.assertIn("LPAREN", g["first"]["item"])
-        self.assertIn("RPAREN", g["follow"]["item"])
+        self.assertIn("(", g["first"]["PROGRAM"])
+        self.assertIn("(", g["first"]["ITEM"])
+        self.assertIn(")", g["follow"]["ITEM"])
 
     def test_tabela_resolve_item(self):
         g = construirGramatica()
-        self.assertIn(("item", "NUMERO"), g["tabela"])
-        self.assertIn(("item", "LPAREN"), g["tabela"])
+        self.assertIn(("ITEM", "numero"), g["tabela"])
+        self.assertIn(("ITEM", "("), g["tabela"])
 
 
 class TestParser(unittest.TestCase):

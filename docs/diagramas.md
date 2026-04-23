@@ -12,7 +12,10 @@ extensão *Markdown Preview Mermaid Support*.
 > [AFD da Fase 1](#5-afd-do-lexer-fase-1) ·
 > [Estruturas de controle](#6-estruturas-de-controle-state-diagram) ·
 > [AST](#7-tipos-de-nó-da-ast-classes) ·
-> [Sequência completa](#8-sequência-completa-de-uma-execução)
+> [Sequência completa](#8-sequência-completa-de-uma-execução) ·
+> [Ponto fixo FIRST/FOLLOW](#9-firstfollow--fluxo-do-ponto-fixo) ·
+> [Tabela LL(1)](#10-construção-da-tabela-ll1--fluxo-de-decisão) ·
+> [Aridade no gerarArvore](#11-decisão-por-aridade-no-parse_expr-gerararvore)
 
 ---
 
@@ -82,11 +85,11 @@ Como a estrutura de dados retornada por `construirGramatica()` é montada.
 
 ```mermaid
 flowchart LR
-    R[("Regras de produção<br/>(31 produções)")] --> F1["calcularFIRST()"]
-    F1 --> F2["calcularFOLLOW()"]
-    F2 --> T["construirTabelaLL1()"]
-    T -->|sem conflitos| OK[("dict {regras, FIRST,<br/>FOLLOW, tabela}")]
-    T -->|conflito| ERR(["Erros('Conflito LL(1) ...')"])
+    R[("Regras de produção<br/>(32 produções, #0..#31)")] --> F1["_calcular_first()"]
+    F1 --> F2["_calcular_follow()"]
+    F2 --> T["_construir_tabela_ll1()"]
+    T -->|sem conflitos| OK[("dict {producoes, terminais,<br/>nao_terminais, inicial,<br/>first, follow, tabela}")]
+    T -->|conflito| ERR(["Erros('Gramática não é LL(1):<br/>M[A,t] tem múltiplas produções...')"])
 
     classDef ok fill:#dcfce7,stroke:#16a34a
     classDef err fill:#fee2e2,stroke:#dc2626
@@ -102,7 +105,7 @@ Algoritmo executado por `parsear(tokens, gram)`.
 
 ```mermaid
 flowchart TD
-    A([Início]) --> B["pilha = ['program', '$']<br/>buffer = tokens + ['$']"]
+    A([Início]) --> B["pilha = ['$', 'PROGRAM']<br/>buffer = tokens + ['$']"]
     B --> C{"topo == '$' ?"}
     C -- sim --> D{"token == '$' ?"}
     D -- sim --> OK([aceita])
@@ -112,7 +115,7 @@ flowchart TD
     G -- sim --> H["consome token<br/>desempilha topo"]
     H --> C
     G -- não --> E2(["erro sintático<br/>(esperado X, achou Y)"])
-    F -- não --> I["consulta tabela[A][a]"]
+    F -- não --> I["consulta tabela[(A, a)]"]
     I --> J{"existe<br/>produção?"}
     J -- não --> E3(["erro sintático"])
     J -- sim --> K["registra regra<br/>na derivação"]
@@ -129,8 +132,11 @@ flowchart TD
 
 ## 5. AFD do lexer (Fase 1)
 
-Diagrama dos 5 estados que continuam em uso na Fase 2 (com a adição dos
-operadores relacionais e das keywords `IF`, `IFELSE`, `WHILE`, `START`, `END`).
+Diagrama dos estados do AFD do lexer (Fase 1) que continua em uso na Fase 2,
+agora reconhecendo também operadores relacionais e as keywords `IF`,
+`IFELSE`, `WHILE`, `START`, `END`, `RES`. O **lexema** é mantido em
+MAIÚSCULAS pelo lexer; a conversão para terminal minúsculo (`if`,
+`while`, …) ocorre depois em `_token_para_terminal()`.
 
 ```mermaid
 stateDiagram-v2
@@ -211,7 +217,7 @@ classDiagram
     }
     class Number {
         +string tipo = "number"
-        +float valor
+        +string valor
     }
     class MemRead {
         +string tipo = "mem_read"
@@ -220,7 +226,7 @@ classDiagram
     class MemWrite {
         +string tipo = "mem_write"
         +string nome
-        +Node expr
+        +Node valor
     }
     class ResRef {
         +string tipo = "res_ref"
@@ -229,13 +235,13 @@ classDiagram
     class If {
         +string tipo = "if"
         +Node cond
-        +Node then
+        +Node then_block
     }
     class IfElse {
         +string tipo = "ifelse"
         +Node cond
-        +Node then
-        +Node else_
+        +Node then_block
+        +Node else_block
     }
     class While {
         +string tipo = "while"
@@ -298,7 +304,100 @@ sequenceDiagram
 
 ---
 
-## 9. Como atualizar este documento
+## 9. FIRST/FOLLOW — fluxo do ponto fixo
+
+Como `_calcular_first` e `_calcular_follow` convergem por iteração até
+nenhum conjunto mudar.
+
+```mermaid
+flowchart TD
+    S([início]) --> I["FIRST[A] = ∅ para todo NT<br/>(ou FOLLOW[S] = {$})"]
+    I --> L{"mudou = False<br/>percorrer todas as<br/>produções A → α"}
+    L --> P["aplicar regras:<br/>FIRST: termos de FIRST(α)<br/>FOLLOW: FIRST(β) e FOLLOW(A)"]
+    P --> Q{"algum conjunto<br/>cresceu?"}
+    Q -- sim --> M["mudou = True"]
+    M --> L
+    Q -- não --> C{"mudou ?"}
+    C -- sim --> L
+    C -- não --> F([ponto fixo atingido])
+
+    classDef ok fill:#dcfce7,stroke:#16a34a
+    class F ok
+```
+
+> A garantia de terminação vem do fato de que os conjuntos só
+> **crescem** (são monótonos) e o universo de terminais é finito.
+
+---
+
+## 10. Construção da tabela LL(1) — fluxo de decisão
+
+Como cada produção contribui para a tabela `M[A, t]` em
+`_construir_tabela_ll1()`.
+
+```mermaid
+flowchart TD
+    A([para cada produção A → α<br/>com índice idx]) --> B["calcular FIRST(α)"]
+    B --> C{"para cada t ∈<br/>FIRST(α) − {ε}"}
+    C --> D{"M[A,t] já<br/>existe?"}
+    D -- não --> E["M[A,t] = idx"]
+    D -- sim, mesma idx --> E
+    D -- sim, outra produção --> X1(["registrar conflito"])
+    E --> C
+    C -- fim --> F{"ε ∈ FIRST(α) ?"}
+    F -- não --> Z([próxima produção])
+    F -- sim --> G{"para cada t ∈<br/>FOLLOW(A)"}
+    G --> H{"M[A,t] já<br/>existe?"}
+    H -- não --> I["M[A,t] = idx"]
+    H -- sim, mesma idx --> I
+    H -- sim, outra produção --> X2(["registrar conflito"])
+    I --> G
+    G -- fim --> Z
+    Z --> A
+    A -- fim --> R{"conflitos<br/>encontrados?"}
+    R -- não --> OK([tabela pronta])
+    R -- sim --> ERR(["raise Erros<br/>'Gramática não é LL(1)'"])
+
+    classDef err fill:#fee2e2,stroke:#dc2626
+    classDef ok fill:#dcfce7,stroke:#16a34a
+    class X1,X2,ERR err
+    class OK ok
+```
+
+---
+
+## 11. Decisão por aridade no `parse_expr` (gerarArvore)
+
+Como `gerarArvore()` usa o **número de itens** dentro dos parênteses
+para escolher o tipo do nó da AST. Esse é o "outro lado" do que torna
+a gramática LL(1): a palavra-chave/operador final de cada expressão é
+o discriminador.
+
+```mermaid
+flowchart TD
+    P[("(  itens...  )")] --> N{"len(itens) ?"}
+    N -- 1 --> A1["mem_read<br/>(MEM)"]
+    N -- 2 --> B{"itens[1].tipo ?"}
+    B -- ident --> A2["mem_write<br/>(V MEM)"]
+    B -- "keyword RES" --> A3["res_ref<br/>(N RES)"]
+    N -- 3 --> C{"itens[2] ?"}
+    C -- "keyword IF" --> A4["if<br/>(C B IF)"]
+    C -- "keyword WHILE" --> A5["while<br/>(C B WHILE)"]
+    C -- "operador" --> A6["binary<br/>(E1 E2 OP)"]
+    N -- 4 --> A7["ifelse<br/>(C T E IFELSE)"]
+
+    classDef ast fill:#e0e7ff,stroke:#4338ca
+    class A1,A2,A3,A4,A5,A6,A7 ast
+```
+
+> Note que **a forma pós-fixada** da linguagem é o que permite essa
+> decisão direta: o "verbo" (operador ou keyword) sempre aparece por
+> último, depois que todos os operandos já foram lidos.
+
+---
+
+## 12. Como atualizar este documento
+
 
 Sempre que a gramática, o parser ou a AST mudarem:
 

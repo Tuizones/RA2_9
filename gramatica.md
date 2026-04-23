@@ -1,14 +1,44 @@
 # Gramática LL(1), FIRST/FOLLOW e Tabela de Análise
 
-> Documento gerado para a **Fase 2** do projeto da disciplina de
+> Documento escrito para a **Fase 2** do projeto da disciplina de
 > **Linguagens Formais e Compiladores** — PUCPR (Prof. Frank Coelho de
 > Alcantara). Grupo **RA2 9**.
 >
-> Todos os dados abaixo podem ser reproduzidos executando:
->
-> ```
-> python scripts/dump_gramatica.py
-> ```
+> O dump dinâmico (atualizado a cada execução) com todos os conjuntos
+> e a tabela completa é gerado automaticamente em `output/gramatica_dump.md`.
+
+---
+
+## 0. Algoritmo de Construção da Tabela de Análise LL(1)
+
+A tabela de análise `M[A, a]` é construída a partir dos conjuntos
+**FIRST** e **FOLLOW** seguindo o algoritmo do livro-texto:
+
+**Para cada regra de produção A → α:**
+
+| Passo | Condição | Ação |
+|:---:|---|---|
+| 1 | Para cada terminal **a** ∈ **FIRST(α)** | Adicione **A → α** em `M[A, a]` |
+| 2 | Se **ε** ∈ **FIRST(α)** | Para cada terminal **b** ∈ **FOLLOW(A)**: adicione **A → α** em `M[A, b]` |
+| 2a | Se **ε** ∈ **FIRST(α)** e **$** ∈ **FOLLOW(A)** | Adicione **A → α** em `M[A, $]` |
+| 3 | Célula vazia | Erro sintático |
+| 4 | Célula com **duas produções** distintas | Conflito LL(1) — gramática **não** é LL(1) |
+
+> **Importante:** ε nunca entra como chave na tabela; é apenas o sinalizador
+> de "propagar para FOLLOW".
+
+### Como o algoritmo se relaciona com FIRST e FOLLOW
+
+```
+FIRST(α) tells the parser: "which terminals can START a string derived from α?"
+FOLLOW(A) tells the parser: "which terminals can FOLLOW A in any sentential form?"
+
+When FIRST(α) contains ε, A can "disappear", so whatever comes after A
+(i.e. FOLLOW(A)) also guides the choice of A → α.
+```
+
+O código Python que implementa este algoritmo está em
+`src/parser_ll1.py` → função `_construir_tabela_ll1()`.
 
 ---
 
@@ -108,42 +138,105 @@ FOLLOW(kw_ctrl4)  = { RPAREN }
 
 ## 4. Tabela de Análise LL(1)
 
-Cada célula `M[não-terminal, terminal]` traz o número da produção a
-aplicar. Células ausentes indicam erro sintático. A tabela é **livre de
-conflitos** — a gramática é LL(1).
+Cada célula `M[A, a]` indica a produção a aplicar quando o topo da pilha é o
+não-terminal **A** e o token corrente é o terminal **a**.
+Células ausentes = **erro sintático**.
+A gramática é **livre de conflitos** — nenhuma célula recebe duas produções.
+
+### 4.1. Formato plano (M[A, a] → #produção)
 
 | M[A, a] | Produção |
 |---|---|
-| M[program, LPAREN] | #0 program → LPAREN START RPAREN body |
-| M[body, LPAREN] | #1 body → LPAREN body_tail |
-| M[body_tail, END] | #2 body_tail → END RPAREN |
-| M[body_tail, LPAREN] | #3 body_tail → expr_body RPAREN body |
-| M[body_tail, NUMERO] | #3 body_tail → expr_body RPAREN body |
-| M[body_tail, IDENT]  | #3 body_tail → expr_body RPAREN body |
-| M[body_tail, RES]    | #3 body_tail → expr_body RPAREN body |
-| M[expr_body, NUMERO] | #4 expr_body → item rest1 |
-| M[expr_body, IDENT]  | #4 expr_body → item rest1 |
-| M[expr_body, RES]    | #4 expr_body → item rest1 |
-| M[expr_body, LPAREN] | #4 expr_body → item rest1 |
-| M[rest1, RPAREN] | #5 rest1 → ε |
-| M[rest1, NUMERO] / IDENT / RES / LPAREN | #6 rest1 → item rest2 |
-| M[rest2, RPAREN] | #7 rest2 → ε |
-| M[rest2, +, -, *, /, \|, %, ^, >, <, ==, !=, >=, <=] | #8 rest2 → binop |
-| M[rest2, IF] / WHILE | #9 rest2 → kw_ctrl3 |
-| M[rest2, NUMERO] / IDENT / RES / LPAREN | #10 rest2 → item item_tail |
+| M[program, LPAREN] | #0  program → LPAREN START RPAREN body |
+| M[body, LPAREN] | #1  body → LPAREN body_tail |
+| M[body_tail, END] | #2  body_tail → END RPAREN |
+| M[body_tail, LPAREN / NUMERO / IDENT / RES] | #3  body_tail → expr_body RPAREN body |
+| M[expr_body, LPAREN / NUMERO / IDENT / RES] | #4  expr_body → item rest1 |
+| M[rest1, RPAREN] | #5  rest1 → ε |
+| M[rest1, LPAREN / NUMERO / IDENT / RES] | #6  rest1 → item rest2 |
+| M[rest2, RPAREN] | #7  rest2 → ε |
+| M[rest2, +/-/\*/…(operadores)] | #8  rest2 → binop |
+| M[rest2, IF / WHILE] | #9  rest2 → kw_ctrl3 |
+| M[rest2, LPAREN / NUMERO / IDENT / RES] | #10 rest2 → item item_tail |
 | M[item_tail, IFELSE] | #11 item_tail → kw_ctrl4 |
 | M[item, NUMERO] | #12 item → NUMERO |
 | M[item, IDENT]  | #13 item → IDENT |
 | M[item, RES]    | #14 item → RES |
 | M[item, LPAREN] | #15 item → LPAREN expr_body RPAREN |
-| M[binop, +] / − / * / / / \| / % / ^ | #16–#22 |
-| M[binop, >] / < / == / != / >= / <= | #23–#28 |
-| M[kw_ctrl3, IF] | #29 |
-| M[kw_ctrl3, WHILE] | #30 |
-| M[kw_ctrl4, IFELSE] | #31 |
+| M[binop, +/-/\*/…] | #16–#28 um por operador |
+| M[kw_ctrl3, IF] | #29 kw_ctrl3 → IF |
+| M[kw_ctrl3, WHILE] | #30 kw_ctrl3 → WHILE |
+| M[kw_ctrl4, IFELSE] | #31 kw_ctrl4 → IFELSE |
 
-A tabela completa e literal (todas as 57 entradas) pode ser regenerada com
-`python scripts/dump_gramatica.py`.
+A tabela completa com todas as 57 entradas é gerada automaticamente em
+[`output/gramatica_dump.md`](output/gramatica_dump.md) (seção 4 do dump).
+
+---
+
+### 4.2. Formato matricial 2D — M[A, a]
+
+Número = índice da produção (ver seção 1). `—` = erro sintático.
+Colunas divididas em dois grupos para caber na página.
+
+**Grupo A — Tokens, palavras-chave e $**
+
+| NT \ T | $ | END | IDENT | IF | IFELSE | LPAREN | NUMERO | RES | RPAREN | WHILE |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `program`   | — | — | — | — | — | **#0** | — | — | — | — |
+| `body`      | — | — | — | — | — | **#1** | — | — | — | — |
+| `body_tail` | — | **#2** | **#3** | — | — | **#3** | **#3** | **#3** | — | — |
+| `expr_body` | — | — | **#4** | — | — | **#4** | **#4** | **#4** | — | — |
+| `rest1`     | — | — | **#6** | — | — | **#6** | **#6** | **#6** | **#5** | — |
+| `rest2`     | — | — | **#10** | **#9** | — | **#10** | **#10** | **#10** | **#7** | **#9** |
+| `item_tail` | — | — | — | — | **#11** | — | — | — | — | — |
+| `item`      | — | — | **#13** | — | — | **#15** | **#12** | **#14** | — | — |
+| `binop`     | — | — | — | — | — | — | — | — | — | — |
+| `kw_ctrl3`  | — | — | — | **#29** | — | — | — | — | — | **#30** |
+| `kw_ctrl4`  | — | — | — | — | **#31** | — | — | — | — | — |
+
+**Grupo B — Operadores**
+
+| NT \ T | != | % | \* | + | - | / | < | <= | == | > | >= | ^ | \| |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `rest2` | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** |
+| `binop` | **#26** | **#21** | **#18** | **#16** | **#17** | **#19** | **#24** | **#28** | **#25** | **#23** | **#27** | **#22** | **#20** |
+
+> Linhas com todas as células `—` são omitidas para brevidade.
+
+---
+
+### 4.3. Como ler a tabela (passo a passo do parser)
+
+O parser mantém uma **pilha** e um **buffer de tokens**. A cada iteração:
+
+```
+Se topo da pilha == terminal:
+    Se topo == token corrente  →  consome (avança no buffer)
+    Caso contrário             →  ERRO SINTÁTICO
+
+Se topo da pilha == não-terminal A, token corrente == a:
+    Se M[A, a] existe          →  expande A com a produção M[A, a]
+    Caso contrário             →  ERRO SINTÁTICO
+
+Se topo == $ e token == $      →  ACEITA ✓
+```
+
+**Exemplo** para `(START) (3 4 +) (END)`:
+
+| Pilha (topo →) | Token | Ação |
+|---|---|---|
+| `program $` | `(` | M[program, LPAREN] = #0 → expande |
+| `LPAREN START RPAREN body $` | `(` | terminal: casa `(` |
+| `START RPAREN body $` | `START` | terminal: casa `START` |
+| `RPAREN body $` | `)` | terminal: casa `)` |
+| `body $` | `(` | M[body, LPAREN] = #1 → expande |
+| `LPAREN body_tail $` | `(` | terminal: casa `(` |
+| `body_tail $` | `3` | M[body_tail, NUMERO] = #3 → expande |
+| `expr_body RPAREN body $` | `3` | M[expr_body, NUMERO] = #4 → expande |
+| … | … | … |
+
+O passo a passo completo da última execução está em
+[`output/derivacao_ultima_execucao.md`](output/derivacao_ultima_execucao.md).
 
 ---
 

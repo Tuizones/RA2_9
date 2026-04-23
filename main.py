@@ -30,14 +30,34 @@ from src.parser_ll1 import derivacao_para_texto_tabela, arvore_para_texto
 
 
 def _dump_gramatica(g: dict) -> str:
-    # Gera um arquivo markdown com as 3 seções exigidas pelo enunciado:
-    # produções numeradas, conjuntos FIRST/FOLLOW e tabela de análise LL(1).
+    # Gera um arquivo markdown com as seções exigidas pelo enunciado:
+    # algoritmo de construção, produções numeradas, conjuntos FIRST/FOLLOW,
+    # tabela de análise LL(1) no formato plano e no formato matricial 2D.
     def fmt_set(s: set) -> str:
         return "{ " + ", ".join(sorted(s)) + " }" if s else "{ }"
 
     md: list[str] = []
 
     md.append("# Gramática LL(1)")
+    md.append("")
+
+    # --- 0. Algoritmo de construção da tabela LL(1) ---
+    md.append("## 0. Algoritmo de Construção da Tabela de Análise LL(1)")
+    md.append("")
+    md.append("Para cada regra de produção **A → α** na gramática:")
+    md.append("")
+    md.append("1. Para cada terminal **a** ∈ FIRST(α):")
+    md.append("   - Adicione a produção **A → α** na célula **Tabela[A, a]**.")
+    md.append("2. Se **ε** ∈ FIRST(α):")
+    md.append("   - Para cada terminal **b** ∈ FOLLOW(A):")
+    md.append("     - Adicione **A → α** na célula **Tabela[A, b]**.")
+    md.append("     - Isso inclui **$** se ele estiver em FOLLOW(A).")
+    md.append("3. Qualquer célula não preenchida = **erro sintático**.")
+    md.append("4. Se alguma célula receber **duas ou mais produções** distintas")
+    md.append("   = **conflito LL(1)** (a gramática **não** é LL(1)).")
+    md.append("")
+    md.append("> Implementado em `_construir_tabela_ll1()` dentro de `src/parser_ll1.py`.")
+    md.append("> O algoritmo itera até ponto-fixo para FIRST e FOLLOW antes de preencher a tabela.")
     md.append("")
 
     # --- 1. Regras de Produção ---
@@ -54,6 +74,9 @@ def _dump_gramatica(g: dict) -> str:
     # --- 2. Conjuntos FIRST ---
     md.append("## 2. Conjuntos FIRST")
     md.append("")
+    md.append("FIRST(A) = conjunto de terminais que podem **iniciar** uma derivação de A.")
+    md.append("Se A pode derivar ε, então ε ∈ FIRST(A).")
+    md.append("")
     md.append("| Não-Terminal | FIRST |")
     md.append("|---|---|")
     for nt in sorted(g["nao_terminais"]):
@@ -64,6 +87,9 @@ def _dump_gramatica(g: dict) -> str:
     # --- 3. Conjuntos FOLLOW ---
     md.append("## 3. Conjuntos FOLLOW")
     md.append("")
+    md.append("FOLLOW(A) = terminais que podem aparecer **imediatamente após** A.")
+    md.append("$ ∈ FOLLOW(símbolo inicial) sempre. ε nunca pertence a FOLLOW.")
+    md.append("")
     md.append("| Não-Terminal | FOLLOW |")
     md.append("|---|---|")
     for nt in sorted(g["nao_terminais"]):
@@ -71,15 +97,68 @@ def _dump_gramatica(g: dict) -> str:
 
     md.append("")
 
-    # --- 4. Tabela de Análise LL(1) ---
-    md.append("## 4. Tabela de Análise LL(1)")
+    # --- 4. Tabela de Análise LL(1) — formato plano ---
+    md.append("## 4. Tabela de Análise LL(1) — Formato Plano")
     md.append("")
-    md.append("| Não-Terminal | Terminal | Produção |")
+    md.append("Cada entrada M[A, a] lista a produção a aplicar.")
+    md.append("Entradas ausentes = erro sintático.")
+    md.append("")
+    md.append("| Não-Terminal (A) | Terminal (a) | Produção |")
     md.append("|---|---|---|")
     for (nt, t), idx in sorted(g["tabela"].items()):
         lhs, rhs = g["producoes"][idx]
         corpo = " ".join(rhs) if rhs else "ε"
-        md.append(f"| {nt} | {t} | {lhs} → {corpo} |")
+        md.append(f"| {nt} | {t} | #{idx}: {lhs} → {corpo} |")
+
+    md.append("")
+
+    # --- 5. Tabela de Análise LL(1) — formato matricial 2D ---
+    # O número na célula é o índice da produção (ver seção 1).
+    # Colunas divididas em dois grupos para caber em markdown.
+    md.append("## 5. Tabela de Análise LL(1) — Formato Matricial M[A, a]")
+    md.append("")
+    md.append("Número na célula = índice da produção (seção 1). `—` = erro sintático.")
+    md.append("")
+
+    # preserva a ordem dos não-terminais conforme aparecem nas produções
+    nt_order: list[str] = []
+    _seen: set[str] = set()
+    for lhs, _ in g["producoes"]:
+        if lhs not in _seen:
+            nt_order.append(lhs)
+            _seen.add(lhs)
+
+    all_terms_in_table = sorted(set(t for (_, t) in g["tabela"].keys()))
+
+    # Grupo A: tokens literais, palavras-chave e EOF
+    kws = {"LPAREN", "RPAREN", "NUMERO", "IDENT", "RES",
+           "END", "IF", "WHILE", "IFELSE", "START", "$"}
+    group_a = [t for t in all_terms_in_table if t in kws]
+    group_b = [t for t in all_terms_in_table if t not in kws]
+
+    for titulo, grp in [
+        ("Grupo A — Tokens, palavras-chave e $", sorted(group_a)),
+        ("Grupo B — Operadores", sorted(group_b)),
+    ]:
+        if not grp:
+            continue
+        md.append(f"### {titulo}")
+        md.append("")
+        md.append("| NT \\ T | " + " | ".join(grp) + " |")
+        md.append("|---|" + "---|" * len(grp))
+        for nt in nt_order:
+            cells = []
+            has_entry = False
+            for term in grp:
+                key = (nt, term)
+                if key in g["tabela"]:
+                    cells.append(f"**#{g['tabela'][key]}**")
+                    has_entry = True
+                else:
+                    cells.append("—")
+            if has_entry:
+                md.append(f"| `{nt}` | " + " | ".join(cells) + " |")
+        md.append("")
 
     return "\n".join(md)
 

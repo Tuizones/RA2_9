@@ -392,11 +392,30 @@ se uma célula da tabela recebesse 2 produções, lançaria `Erros("Conflito LL(
 
 ## 8. Tabela de Análise LL(1)
 
-Cada célula `M[A, a]` indica qual produção aplicar quando o **topo da pilha** é o
-não-terminal `A` e o **token corrente** é `a`. Células não listadas = **erro sintático**.
+### 8.1. Algoritmo de construção
 
-A tabela completa com as 57 entradas é gerada automaticamente a cada execução em
-[`output/gramatica_dump.md`](output/gramatica_dump.md). As entradas mais importantes:
+Conforme apresentado nas aulas, a tabela `M[A, a]` é construída a partir dos
+conjuntos FIRST e FOLLOW com o seguinte algoritmo:
+
+> **Para cada regra de produção A → α:**
+>
+> | Passo | Condição | Ação |
+> |:---:|---|---|
+> | 1 | Para cada terminal **a** ∈ FIRST(α) | Adicione **A → α** em `M[A, a]` |
+> | 2 | Se **ε** ∈ FIRST(α) | Para cada **b** ∈ FOLLOW(A): adicione **A → α** em `M[A, b]` |
+> | 3 | Célula vazia | Erro sintático |
+> | 4 | Célula com 2+ produções | Conflito LL(1) — gramática não é LL(1) |
+>
+> ε nunca é chave na tabela — é apenas o sinalizador de "propagar para FOLLOW".
+
+O código Python que executa este algoritmo está em `src/parser_ll1.py` →
+`_construir_tabela_ll1()`. A função detecta conflitos em tempo de execução.
+
+### 8.2. Entradas da tabela (formato plano)
+
+Cada célula `M[A, a]` indica qual produção aplicar quando o **topo da pilha**
+é o não-terminal `A` e o **token corrente** é `a`.
+Células não listadas = **erro sintático**.
 
 | M\[A, a\] | Produção |
 |---|---|
@@ -416,6 +435,74 @@ A tabela completa com as 57 entradas é gerada automaticamente a cada execução
 | `M[item, IDENT]` | `item → IDENT` |
 | `M[item, RES]` | `item → RES` |
 | `M[item, (]` | `item → LPAREN expr_body RPAREN` |
+
+### 8.3. Formato matricial M[A, a]
+
+Número = índice da produção. `—` = erro sintático.
+
+**Grupo A — Tokens, palavras-chave e $**
+
+| NT \ T | $ | END | IDENT | IF | IFELSE | `(` | NUMERO | RES | `)` | WHILE |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `program`   | — | — | — | — | — | **0** | — | — | — | — |
+| `body`      | — | — | — | — | — | **1** | — | — | — | — |
+| `body_tail` | — | **2** | **3** | — | — | **3** | **3** | **3** | — | — |
+| `expr_body` | — | — | **4** | — | — | **4** | **4** | **4** | — | — |
+| `rest1`     | — | — | **6** | — | — | **6** | **6** | **6** | **5** | — |
+| `rest2`     | — | — | **10** | **9** | — | **10** | **10** | **10** | **7** | **9** |
+| `item_tail` | — | — | — | — | **11** | — | — | — | — | — |
+| `item`      | — | — | **13** | — | — | **15** | **12** | **14** | — | — |
+| `kw_ctrl3`  | — | — | — | **29** | — | — | — | — | — | **30** |
+| `kw_ctrl4`  | — | — | — | — | **31** | — | — | — | — | — |
+
+**Grupo B — Operadores** (somente `rest2` e `binop` têm entradas)
+
+| NT \ T | != | % | \* | + | - | / | < | <= | == | > | >= | ^ | \| |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `rest2` | **8** | **8** | **8** | **8** | **8** | **8** | **8** | **8** | **8** | **8** | **8** | **8** | **8** |
+| `binop` | 26 | 21 | 18 | 16 | 17 | 19 | 24 | 28 | 25 | 23 | 27 | 22 | 20 |
+
+**Legenda — Regras de Produção** (número usado nas células acima)
+
+| # | Produção |
+|:---:|---|
+| 0 | `program → ( START ) body` |
+| 1 | `body → ( body_tail` |
+| 2 | `body_tail → END )` |
+| 3 | `body_tail → expr_body ) body` |
+| 4 | `expr_body → item rest1` |
+| 5 | `rest1 → ε` |
+| 6 | `rest1 → item rest2` |
+| 7 | `rest2 → ε` |
+| 8 | `rest2 → binop` |
+| 9 | `rest2 → kw_ctrl3` |
+| 10 | `rest2 → item item_tail` |
+| 11 | `item_tail → kw_ctrl4` |
+| 12 | `item → NUMERO` |
+| 13 | `item → IDENT` |
+| 14 | `item → RES` |
+| 15 | `item → ( expr_body )` |
+| 16 | `binop → +` |
+| 17 | `binop → -` |
+| 18 | `binop → *` |
+| 19 | `binop → /` |
+| 20 | `binop → \|` |
+| 21 | `binop → %` |
+| 22 | `binop → ^` |
+| 23 | `binop → >` |
+| 24 | `binop → <` |
+| 25 | `binop → ==` |
+| 26 | `binop → !=` |
+| 27 | `binop → >=` |
+| 28 | `binop → <=` |
+| 29 | `kw_ctrl3 → IF` |
+| 30 | `kw_ctrl3 → WHILE` |
+| 31 | `kw_ctrl4 → IFELSE` |
+
+A tabela completa com todas as 57 entradas é gerada automaticamente a cada
+execução em [`output/gramatica_dump.md`](output/gramatica_dump.md).
+A documentação formal com o algoritmo e a tabela estática está em
+[`gramatica.md`](gramatica.md).
 
 ---
 

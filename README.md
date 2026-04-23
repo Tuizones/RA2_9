@@ -278,18 +278,6 @@ python main.py teste2.txt \
 ```bash
 python -m pytest tests/ -v
 ```
-
-Resultado esperado: **37 testes**, todos passando.
-
-### 5.6. Executar o Assembly no CPUlator
-
-1. Abrir <https://cpulator.01xz.net/?sys=arm-de1soc>
-2. Colar o conteúdo de `output/ultima_execucao.s` no editor
-3. Pressionar **F7** (Compilar) e depois **F5** (Executar)
-4. O resultado da última expressão aparece no display **HEX3–HEX0**
-
----
-
 ## 6. Gramática LL(1)
 
 Convenção: **minúsculas** = não-terminais · **MAIÚSCULAS** = terminais · `ε` = cadeia vazia

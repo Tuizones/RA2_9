@@ -44,52 +44,196 @@ O código Python que implementa este algoritmo está em
 
 ## 1. Regras de Produção (EBNF)
 
-Convenção: **minúsculas** = não-terminais, **MAIÚSCULAS** = terminais.
-`ε` é a cadeia vazia. `$` é o marcador de fim de entrada.
+Convenção (conforme ISO/IEC 14977 e o enunciado da Fase 2):
+
+* **MAIÚSCULAS** = não-terminais (ex.: `PROGRAM`, `EXPR_BODY`).
+* **minúsculas** = terminais — categorias léxicas (`numero`, `ident`).
+* **Literais entre aspas** (`"("`, `"+"`, `"IF"`, `"START"`) = terminais
+  que representam o lexema exato produzido pela Fase 1.
+* `=` define uma regra, `;` encerra a regra,
+  `[ ... ]` opcional (0 ou 1), `{ ... }` repetição (0 ou mais),
+  `( ... )` agrupamento, `|` alternativa.
+* `ε` é a cadeia vazia (implícita em `[ ]` e `{ }`); `$` é o marcador de
+  fim de entrada usado pela tabela LL(1).
+
+### 1.1. Forma EBNF (com `[ ]` / `{ }` — leitura humana)
+
+#### Como ler EBNF (símbolos da meta-linguagem)
+
+| Símbolo | Significado |
+|:---:|---|
+| `=` | "é definido como" — abre a regra |
+| `,` | **e depois** (concatenação / sequência). **Não é "ou".** |
+| `\|` | **ou** (alternativa) |
+| `{ X }` | **zero ou mais** ocorrências de `X` (repetição) |
+| `[ X ]` | **opcional** — zero ou uma ocorrência de `X` |
+| `( ... )` | agrupamento |
+| `"texto"` | terminal literal exato |
+| `;` | fim da regra |
+
+> **Atenção:** em EBNF a vírgula significa **concatenação**, não escolha.
+> `A , B` = "primeiro A, depois B"; `A | B` = "A ou B".
+
+#### A gramática
+
+```ebnf
+PROGRAM   = "(" start ")" , { "(" EXPR_BODY ")" } , "(" end ")" ;
+
+EXPR_BODY = ITEM
+          | ITEM , ITEM , [ TAIL ] ;
+
+TAIL      = BINOP
+          | KW_CTRL3
+          | ITEM , KW_CTRL4 ;
+
+ITEM      = numero
+          | ident
+          | res
+          | "(" , EXPR_BODY , ")" ;
+
+BINOP     = "+" | "-" | "*" | "/" | "|" | "%" | "^"
+          | ">" | "<" | "==" | "!=" | ">=" | "<=" ;
+
+KW_CTRL3  = if | while ;
+KW_CTRL4  = ifelse ;
+```
+
+#### Lendo cada regra em português
+
+- **`PROGRAM`** — *uma* sequência fixa: `(start)` no início, depois
+  **zero ou mais** blocos `(EXPR_BODY)`, depois `(end)` no fim.
+  Não é uma escolha entre alternativas — é a estrutura única e
+  obrigatória de qualquer programa válido.
+- **`EXPR_BODY`** — o conteúdo de um statement, *sem* os parênteses
+  externos. Pode ser **1 item** isolado (forma `(MEM)`) ou **2 itens
+  obrigatórios** seguidos de uma `TAIL` opcional.
+- **`TAIL`** — o "verbo" de uma expressão pós-fixada: um operador
+  binário, uma keyword de 2 operandos (`if`/`while`) ou um terceiro
+  item seguido de `ifelse` (4 itens no total).
+- **`ITEM`** — um operando: número, identificador de memória, a
+  palavra-chave `res`, ou uma sub-expressão completa entre parênteses
+  (recursão que permite aninhamento arbitrário).
+- **`BINOP`, `KW_CTRL3`, `KW_CTRL4`** — apenas listas de tokens
+  terminais; servem para agrupar e dar nome.
+
+#### Exemplo: derivando `(START) (10 3 +) (END)`
 
 ```
-(00) program    -> LPAREN START RPAREN body
-(01) body       -> LPAREN body_tail
-(02) body_tail  -> END RPAREN
-(03) body_tail  -> expr_body RPAREN body
-(04) expr_body  -> item rest1
-(05) rest1      -> ε
-(06) rest1      -> item rest2
-(07) rest2      -> ε
-(08) rest2      -> binop
-(09) rest2      -> kw_ctrl3
-(10) rest2      -> item item_tail
-(11) item_tail  -> kw_ctrl4
-(12) item       -> NUMERO
-(13) item       -> IDENT
-(14) item       -> RES
-(15) item       -> LPAREN expr_body RPAREN
-(16) binop      -> +
-(17) binop      -> -
-(18) binop      -> *
-(19) binop      -> /        @ divisão inteira
-(20) binop      -> |        @ divisão real
-(21) binop      -> %
-(22) binop      -> ^
-(23) binop      -> >
-(24) binop      -> <
-(25) binop      -> ==
-(26) binop      -> !=
-(27) binop      -> >=
-(28) binop      -> <=
-(29) kw_ctrl3   -> IF
-(30) kw_ctrl3   -> WHILE
-(31) kw_ctrl4   -> IFELSE
+PROGRAM
+  = "(" start ")"  ,  { "(" EXPR_BODY ")" }  ,  "(" end ")"
+                       └─ uma iteração ─┘
+                       └ EXPR_BODY = 10 , 3 , (TAIL = BINOP = "+")
 ```
+
+A repetição `{ ... }` deu **uma** volta (um único statement no meio);
+poderia ter dado zero (`(START)(END)`) ou várias.
+
+> **Nota sobre caixa.** Em conformidade com a convenção EBNF
+> (ISO/IEC 14977), os terminais aparecem em **minúsculas** (`start`,
+> `end`, `if`, `while`, `ifelse`, `res`, `numero`, `ident`) ou como
+> literais entre aspas. No código-fonte do programa parseado, esses
+> mesmos lexemas são escritos em **MAIÚSCULAS** (`(START)`, `(IF …)`).
+> A função `_token_para_terminal()` em `src/parser_ll1.py` faz a
+> tradução `lexema MAIÚSCULO → terminal minúsculo` que alimenta a
+> tabela LL(1).
+
+> **Notas léxicas** (definidas pela Fase 1, `src/lexer_fsm.py`):
+> `numero` = inteiro ou decimal sem sinal; `ident` = sequência de
+> letras maiúsculas `[A-Z]+`. As palavras reservadas `START`, `END`,
+> `RES`, `IF`, `WHILE`, `IFELSE` são tokens literais distintos de `ident`.
+
+> **Por que ainda precisamos da BNF da § 1.2.** EBNF é ótima para
+> humanos mas a tabela LL(1) só sabe consultar regras no formato
+> `A → α` (sem `{ }` ou `[ ]`). Cada `{ ... }` e `[ ... }` precisa ser
+> traduzido para um novo não-terminal recursivo/anulável. Por exemplo,
+> a repetição `{ "(" EXPR_BODY ")" } "(" end ")"` vira `BODY → "(" BODY_TAIL`
+> com `BODY_TAIL` decidindo a cada iteração entre "acabou" (`end ")"`)
+> e "vem mais um statement" (`EXPR_BODY ")" BODY`). Mesma informação,
+> formato diferente.
+
+### 1.2. Forma BNF fatorada (numerada — base da tabela LL(1))
+
+A EBNF acima é traduzida internamente para a BNF abaixo, onde cada
+construção `[ ]` / `{ }` vira um não-terminal anulável (`REST1`, `REST2`,
+`ITEM_TAIL`, `BODY`, `BODY_TAIL`). É **esta** numeração (`#0..#31`) que
+aparece como índice de produção na tabela `M[A, a]` da seção 4 e no
+arquivo `output/derivacao_ultima_execucao.md`.
+
+```
+(#0)  PROGRAM   = "(" , "START" , ")" , BODY ;
+(#1)  BODY      = "(" , BODY_TAIL ;
+(#2)  BODY_TAIL = "END" , ")" ;
+(#3)            | EXPR_BODY , ")" , BODY ;
+(#4)  EXPR_BODY = ITEM , REST1 ;
+(#5)  REST1     = ε ;
+(#6)            | ITEM , REST2 ;
+(#7)  REST2     = ε ;
+(#8)            | BINOP ;
+(#9)            | KW_CTRL3 ;
+(#10)           | ITEM , ITEM_TAIL ;
+(#11) ITEM_TAIL = KW_CTRL4 ;
+(#12) ITEM      = numero ;
+(#13)           | ident ;
+(#14)           | "RES" ;
+(#15)           | "(" , EXPR_BODY , ")" ;
+(#16) BINOP     = "+" ;
+(#17)           | "-" ;
+(#18)           | "*" ;
+(#19)           | "/" ;       (* divisão inteira *)
+(#20)           | "|" ;       (* divisão real    *)
+(#21)           | "%" ;
+(#22)           | "^" ;
+(#23)           | ">" ;
+(#24)           | "<" ;
+(#25)           | "==" ;
+(#26)           | "!=" ;
+(#27)           | ">=" ;
+(#28)           | "<=" ;
+(#29) KW_CTRL3  = "IF" ;
+(#30)           | "WHILE" ;
+(#31) KW_CTRL4  = "IFELSE" ;
+```
+
+### 1.3. Mapeamento literal → símbolo interno
+
+A implementação em `src/parser_ll1.py` e o dump automático em
+`output/gramatica_dump.md` usam **nomes simbólicos** para os terminais
+estruturais (em vez do lexema literal), pois é mais legível em código
+e evita ambiguidade no relatório. A correspondência é:
+
+| Literal (EBNF) | Símbolo interno | Significado |
+|---|---|---|
+| `"("`     | `LPAREN`  | abre parêntese |
+| `")"`     | `RPAREN`  | fecha parêntese |
+| `numero`  | `NUMERO`  | número (categoria léxica) |
+| `ident`   | `IDENT`   | identificador (categoria léxica) |
+| `"START"` | `START`   | palavra reservada |
+| `"END"`   | `END`     | palavra reservada |
+| `"RES"`   | `RES`     | palavra reservada |
+| `"IF"`    | `IF`      | palavra reservada |
+| `"WHILE"` | `WHILE`   | palavra reservada |
+| `"IFELSE"`| `IFELSE`  | palavra reservada |
+| `+ - * / \| % ^ > < == != >= <=` | o próprio lexema | operadores binários |
+
+> **Convenção das próximas seções (FIRST, FOLLOW e Tabela LL(1)):** os
+> não-terminais aparecem em **MAIÚSCULAS** (`PROGRAM`, `BODY`, …) como
+> exige a Fase 2. Os terminais aparecem com seus **símbolos internos**
+> (`LPAREN`, `NUMERO`, `IDENT`, `IF`, …) — equivalentes 1-para-1 aos
+> literais EBNF (`"("`, `numero`, `ident`, `"IF"`, …) listados na
+> tabela acima — para casar exatamente com o dump auto-gerado em
+> `output/gramatica_dump.md`. Operadores são exibidos pelo próprio
+> lexema (`+`, `-`, `==`, …).
 
 ### Observações sobre o desenho da gramática
 
-1. **Fatoração à esquerda em `body`.** Sem ela, a produção
-   `program → (START) stmt_list (END)` geraria um conflito LL(1) em
-   `[stmt_list, LPAREN]`, já que tanto `stmt` quanto `(END)` começam com
-   `LPAREN`. Consumimos o `LPAREN` antes e só então decidimos pelo
-   terminal de *lookahead* (`END` vs. início de `expr_body`).
-2. **`rest1` / `rest2` / `item_tail` são anuláveis somente quando
+1. **Fatoração à esquerda em `BODY`.** Sem ela, a forma EBNF
+   `PROGRAM → "(" start ")" { "(" EXPR_BODY ")" } "(" end ")"`,
+   ao ser traduzida diretamente em BNF, geraria duas alternativas
+   começando com `"("` (uma para mais um statement, outra para
+   `"(" end ")"`). Isso causaria conflito LL(1). Consumimos o `"("`
+   antes (em `BODY → "(" BODY_TAIL`) e só então decidimos pelo
+   terminal de *lookahead* (`end` vs. início de `EXPR_BODY`).
+2. **`REST1` / `REST2` / `ITEM_TAIL` são anuláveis somente quando
    necessário.** Isso garante que, no pior caso, a decisão use apenas
    um símbolo de *lookahead*.
 3. **Comandos especiais** (`(V MEM)`, `(MEM)`, `(N RES)`) e
@@ -102,36 +246,36 @@ Convenção: **minúsculas** = não-terminais, **MAIÚSCULAS** = terminais.
 ## 2. Conjuntos FIRST
 
 ```
-FIRST(program)   = { LPAREN }
-FIRST(body)      = { LPAREN }
-FIRST(body_tail) = { END, IDENT, LPAREN, NUMERO, RES }
-FIRST(expr_body) = { IDENT, LPAREN, NUMERO, RES }
-FIRST(rest1)     = { IDENT, LPAREN, NUMERO, RES, ε }
-FIRST(rest2)     = { !=, %, *, +, -, /, <, <=, ==, >, >=,
+FIRST(PROGRAM)   = { LPAREN }
+FIRST(BODY)      = { LPAREN }
+FIRST(BODY_TAIL) = { END, IDENT, LPAREN, NUMERO, RES }
+FIRST(EXPR_BODY) = { IDENT, LPAREN, NUMERO, RES }
+FIRST(REST1)     = { IDENT, LPAREN, NUMERO, RES, ε }
+FIRST(REST2)     = { !=, %, *, +, -, /, <, <=, ==, >, >=,
                      IDENT, IF, LPAREN, NUMERO, RES, WHILE, ^, |, ε }
-FIRST(item_tail) = { IFELSE }
-FIRST(item)      = { IDENT, LPAREN, NUMERO, RES }
-FIRST(binop)     = { !=, %, *, +, -, /, <, <=, ==, >, >=, ^, | }
-FIRST(kw_ctrl3)  = { IF, WHILE }
-FIRST(kw_ctrl4)  = { IFELSE }
+FIRST(ITEM_TAIL) = { IFELSE }
+FIRST(ITEM)      = { IDENT, LPAREN, NUMERO, RES }
+FIRST(BINOP)     = { !=, %, *, +, -, /, <, <=, ==, >, >=, ^, | }
+FIRST(KW_CTRL3)  = { IF, WHILE }
+FIRST(KW_CTRL4)  = { IFELSE }
 ```
 
 ## 3. Conjuntos FOLLOW
 
 ```
-FOLLOW(program)   = { $ }
-FOLLOW(body)      = { $ }
-FOLLOW(body_tail) = { $ }
-FOLLOW(expr_body) = { RPAREN }
-FOLLOW(rest1)     = { RPAREN }
-FOLLOW(rest2)     = { RPAREN }
-FOLLOW(item_tail) = { RPAREN }
-FOLLOW(item)      = { !=, %, *, +, -, /, <, <=, ==, >, >=,
+FOLLOW(PROGRAM)   = { $ }
+FOLLOW(BODY)      = { $ }
+FOLLOW(BODY_TAIL) = { $ }
+FOLLOW(EXPR_BODY) = { RPAREN }
+FOLLOW(REST1)     = { RPAREN }
+FOLLOW(REST2)     = { RPAREN }
+FOLLOW(ITEM_TAIL) = { RPAREN }
+FOLLOW(ITEM)      = { !=, %, *, +, -, /, <, <=, ==, >, >=,
                       IDENT, IF, IFELSE, LPAREN, NUMERO, RES,
                       RPAREN, WHILE, ^, | }
-FOLLOW(binop)     = { RPAREN }
-FOLLOW(kw_ctrl3)  = { RPAREN }
-FOLLOW(kw_ctrl4)  = { RPAREN }
+FOLLOW(BINOP)     = { RPAREN }
+FOLLOW(KW_CTRL3)  = { RPAREN }
+FOLLOW(KW_CTRL4)  = { RPAREN }
 ```
 
 ---
@@ -147,26 +291,26 @@ A gramática é **livre de conflitos** — nenhuma célula recebe duas produçõ
 
 | M[A, a] | Produção |
 |---|---|
-| M[program, LPAREN] | #0  program → LPAREN START RPAREN body |
-| M[body, LPAREN] | #1  body → LPAREN body_tail |
-| M[body_tail, END] | #2  body_tail → END RPAREN |
-| M[body_tail, LPAREN / NUMERO / IDENT / RES] | #3  body_tail → expr_body RPAREN body |
-| M[expr_body, LPAREN / NUMERO / IDENT / RES] | #4  expr_body → item rest1 |
-| M[rest1, RPAREN] | #5  rest1 → ε |
-| M[rest1, LPAREN / NUMERO / IDENT / RES] | #6  rest1 → item rest2 |
-| M[rest2, RPAREN] | #7  rest2 → ε |
-| M[rest2, +/-/\*/…(operadores)] | #8  rest2 → binop |
-| M[rest2, IF / WHILE] | #9  rest2 → kw_ctrl3 |
-| M[rest2, LPAREN / NUMERO / IDENT / RES] | #10 rest2 → item item_tail |
-| M[item_tail, IFELSE] | #11 item_tail → kw_ctrl4 |
-| M[item, NUMERO] | #12 item → NUMERO |
-| M[item, IDENT]  | #13 item → IDENT |
-| M[item, RES]    | #14 item → RES |
-| M[item, LPAREN] | #15 item → LPAREN expr_body RPAREN |
-| M[binop, +/-/\*/…] | #16–#28 um por operador |
-| M[kw_ctrl3, IF] | #29 kw_ctrl3 → IF |
-| M[kw_ctrl3, WHILE] | #30 kw_ctrl3 → WHILE |
-| M[kw_ctrl4, IFELSE] | #31 kw_ctrl4 → IFELSE |
+| M[PROGRAM, LPAREN] | #0  PROGRAM → LPAREN START RPAREN BODY |
+| M[BODY, LPAREN] | #1  BODY → LPAREN BODY_TAIL |
+| M[BODY_TAIL, END] | #2  BODY_TAIL → END RPAREN |
+| M[BODY_TAIL, LPAREN / NUMERO / IDENT / RES] | #3  BODY_TAIL → EXPR_BODY RPAREN BODY |
+| M[EXPR_BODY, LPAREN / NUMERO / IDENT / RES] | #4  EXPR_BODY → ITEM REST1 |
+| M[REST1, RPAREN] | #5  REST1 → ε |
+| M[REST1, LPAREN / NUMERO / IDENT / RES] | #6  REST1 → ITEM REST2 |
+| M[REST2, RPAREN] | #7  REST2 → ε |
+| M[REST2, +/-/\*/…(operadores)] | #8  REST2 → BINOP |
+| M[REST2, IF / WHILE] | #9  REST2 → KW_CTRL3 |
+| M[REST2, LPAREN / NUMERO / IDENT / RES] | #10 REST2 → ITEM ITEM_TAIL |
+| M[ITEM_TAIL, IFELSE] | #11 ITEM_TAIL → KW_CTRL4 |
+| M[ITEM, NUMERO] | #12 ITEM → NUMERO |
+| M[ITEM, IDENT]  | #13 ITEM → IDENT |
+| M[ITEM, RES]    | #14 ITEM → RES |
+| M[ITEM, LPAREN] | #15 ITEM → LPAREN EXPR_BODY RPAREN |
+| M[BINOP, +/-/\*/…] | #16–#28 um por operador |
+| M[KW_CTRL3, IF] | #29 KW_CTRL3 → IF |
+| M[KW_CTRL3, WHILE] | #30 KW_CTRL3 → WHILE |
+| M[KW_CTRL4, IFELSE] | #31 KW_CTRL4 → IFELSE |
 
 A tabela completa com todas as 57 entradas é gerada automaticamente em
 [`output/gramatica_dump.md`](output/gramatica_dump.md) (seção 4 do dump).
@@ -176,32 +320,21 @@ A tabela completa com todas as 57 entradas é gerada automaticamente em
 ### 4.2. Formato matricial 2D — M[A, a]
 
 Número = índice da produção (ver seção 1). `—` = erro sintático.
-Colunas divididas em dois grupos para caber na página.
+Uma única tabela com **todos** os terminais (tokens, palavras-chave, operadores e `$`).
 
-**Grupo A — Tokens, palavras-chave e $**
-
-| NT \ T | $ | END | IDENT | IF | IFELSE | LPAREN | NUMERO | RES | RPAREN | WHILE |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| `program`   | — | — | — | — | — | **#0** | — | — | — | — |
-| `body`      | — | — | — | — | — | **#1** | — | — | — | — |
-| `body_tail` | — | **#2** | **#3** | — | — | **#3** | **#3** | **#3** | — | — |
-| `expr_body` | — | — | **#4** | — | — | **#4** | **#4** | **#4** | — | — |
-| `rest1`     | — | — | **#6** | — | — | **#6** | **#6** | **#6** | **#5** | — |
-| `rest2`     | — | — | **#10** | **#9** | — | **#10** | **#10** | **#10** | **#7** | **#9** |
-| `item_tail` | — | — | — | — | **#11** | — | — | — | — | — |
-| `item`      | — | — | **#13** | — | — | **#15** | **#12** | **#14** | — | — |
-| `binop`     | — | — | — | — | — | — | — | — | — | — |
-| `kw_ctrl3`  | — | — | — | **#29** | — | — | — | — | — | **#30** |
-| `kw_ctrl4`  | — | — | — | — | **#31** | — | — | — | — | — |
-
-**Grupo B — Operadores**
-
-| NT \ T | != | % | \* | + | - | / | < | <= | == | > | >= | ^ | \| |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| `rest2` | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** | **#8** |
-| `binop` | **#26** | **#21** | **#18** | **#16** | **#17** | **#19** | **#24** | **#28** | **#25** | **#23** | **#27** | **#22** | **#20** |
-
-> Linhas com todas as células `—` são omitidas para brevidade.
+| NT \ T | $ | LPAREN | RPAREN | NUMERO | IDENT | END | RES | IF | WHILE | IFELSE | + | - | \* | / | \| | % | ^ | > | < | == | != | >= | <= |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `PROGRAM`   | — | **#0**  | — | —      | —      | —     | —      | —     | —      | —      | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `BODY`      | — | **#1**  | — | —      | —      | —     | —      | —     | —      | —      | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `BODY_TAIL` | — | **#3**  | — | **#3** | **#3** | **#2**| **#3** | —     | —      | —      | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `EXPR_BODY` | — | **#4**  | — | **#4** | **#4** | —     | **#4** | —     | —      | —      | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `ITEM`      | — | **#15** | — | **#12**| **#13**| —     | **#14**| —     | —      | —      | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `REST1`     | — | **#6**  | **#5** | **#6** | **#6** | —  | **#6** | —     | —      | —      | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `REST2`     | — | **#10** | **#7** | **#10**| **#10**| —  | **#10**| **#9**| **#9** | —      | **#8**| **#8**| **#8**| **#8**| **#8**| **#8**| **#8**| **#8**| **#8**| **#8**| **#8**| **#8**| **#8** |
+| `ITEM_TAIL` | — | —       | — | —      | —      | —     | —      | —     | —      | **#11**| — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `BINOP`     | — | —       | — | —      | —      | —     | —      | —     | —      | —      |**#16**|**#17**|**#18**|**#19**|**#20**|**#21**|**#22**|**#23**|**#24**|**#25**|**#26**|**#27**|**#28**|
+| `KW_CTRL3`  | — | —       | — | —      | —      | —     | —      |**#29**|**#30** | —      | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `KW_CTRL4`  | — | —       | — | —      | —      | —     | —      | —     | —      |**#31** | — | — | — | — | — | — | — | — | — | — | — | — | — |
 
 ---
 
@@ -225,14 +358,14 @@ Se topo == $ e token == $      →  ACEITA ✓
 
 | Pilha (topo →) | Token | Ação |
 |---|---|---|
-| `program $` | `(` | M[program, LPAREN] = #0 → expande |
-| `LPAREN START RPAREN body $` | `(` | terminal: casa `(` |
-| `START RPAREN body $` | `START` | terminal: casa `START` |
-| `RPAREN body $` | `)` | terminal: casa `)` |
-| `body $` | `(` | M[body, LPAREN] = #1 → expande |
-| `LPAREN body_tail $` | `(` | terminal: casa `(` |
-| `body_tail $` | `3` | M[body_tail, NUMERO] = #3 → expande |
-| `expr_body RPAREN body $` | `3` | M[expr_body, NUMERO] = #4 → expande |
+| `PROGRAM $` | `(` | M[PROGRAM, LPAREN] = #0 → expande |
+| `LPAREN START RPAREN BODY $` | `(` | terminal: casa `(` |
+| `START RPAREN BODY $` | `START` | terminal: casa `START` |
+| `RPAREN BODY $` | `)` | terminal: casa `)` |
+| `BODY $` | `(` | M[BODY, LPAREN] = #1 → expande |
+| `LPAREN BODY_TAIL $` | `(` | terminal: casa `(` |
+| `BODY_TAIL $` | `3` | M[BODY_TAIL, NUMERO] = #3 → expande |
+| `EXPR_BODY RPAREN BODY $` | `3` | M[EXPR_BODY, NUMERO] = #4 → expande |
 | … | … | … |
 
 O passo a passo completo da última execução está em

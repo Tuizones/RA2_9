@@ -36,7 +36,7 @@
 
 ## 1. O que o projeto faz
 
-Este projeto é um **compilador completo de brinquedo**: lê um arquivo-fonte
+Este projeto é um **Compilador**: lê um arquivo-fonte
 escrito numa linguagem RPN (Notação Polonesa Reversa) personalizada, valida
 a sintaxe com um **parser LL(1)**, constrói uma **Árvore Sintática Abstrata
 (AST)** e gera **código Assembly ARMv7** pronto para rodar no simulador
@@ -158,8 +158,7 @@ e termina com `(END)` — uma instrução por linha.
 | `%` | Resto da divisão inteira | `(10 3 %)` | `1` |
 | `^` | Potenciação | `(2 5 ^)` | `32` |
 
-> **Por que `|` para divisão real?** O `/` já estava em uso como divisão inteira
-> desde a Fase 1. Escolhemos `|` como alternativa visual — ambos são "barras".
+> **Alterado de `\\` para `|` nessa atividade** 
 
 ### 4.2. Operadores relacionais
 
@@ -732,18 +731,6 @@ As operações sem instrução nativa em ARMv7 são implementadas como sub-rotin
 ---
 
 ## 12. Arquivos de Teste
-
-Cada arquivo tem **mais de 10 linhas** e cumpre todos os requisitos do enunciado:
-
-| Requisito | teste1 | teste2 | teste3 |
-|---|:---:|:---:|:---:|
-| Todos os operadores `+ - * \| / % ^` | ✅ | ✅ | ✅ |
-| Comandos `(N RES)`, `(V MEM)`, `(MEM)` | ✅ | ✅ | ✅ |
-| Estrutura de **decisão** (`IF` / `IFELSE`) | ✅ | ✅ | ✅ |
-| Estrutura de **repetição** (`WHILE`) | ✅ | ✅ | ✅ |
-| Literais inteiros, reais e variáveis | ✅ | ✅ | ✅ |
-| Aninhamento profundo | ✅ | ✅ | ✅ |
-
 Para validar o tratamento de erros:
 
 | Arquivo | Erros cobertos |

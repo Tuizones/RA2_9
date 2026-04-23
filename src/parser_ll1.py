@@ -17,32 +17,40 @@
 # A linguagem é baseada em notação pós-fixada (RPN), sempre entre parênteses.
 # Todo programa começa com (START) e termina com (END).
 #
-# Gramática que definimos (minúsculas = não-terminais, MAIÚSCULAS = terminais):
+# Convenção (EBNF / ISO 14977 — ver gramatica.md):
+#   MAIÚSCULAS                = não-terminais
+#   minúsculas / "literais"   = terminais
+# Para legibilidade do código abaixo, os terminais estruturais usam um
+# nome simbólico interno (LPAREN = "(", NUMERO = numero, IDENT = ident,
+# IF = "IF", …). A correspondência 1-para-1 com a EBNF está documentada
+# na seção 1.3 de gramatica.md.
 #
-#   program    -> LPAREN START RPAREN body
-#   body       -> LPAREN body_tail
-#   body_tail  -> END RPAREN                        # fim do programa
-#              |  expr_body RPAREN body              # mais um statement
-#   expr_body  -> item rest1
-#   rest1      -> ε                                 # (MEM) — só um item
-#              |  item rest2
-#   rest2      -> ε                                 # (V MEM) ou (N RES)
-#              |  binop                              # (A B op)
-#              |  kw_ctrl3                           # (COND BLOCO IF/WHILE)
-#              |  item item_tail
-#   item_tail  -> kw_ctrl4                           # (COND THEN ELSE IFELSE)
-#   item       -> NUMERO | IDENT | RES
-#              |  LPAREN expr_body RPAREN
-#   binop      -> + | - | * | / | | | % | ^
+# Gramática BNF fatorada (base da tabela LL(1) — numeração #0..#31):
+#
+#   PROGRAM    -> LPAREN START RPAREN BODY
+#   BODY       -> LPAREN BODY_TAIL
+#   BODY_TAIL  -> END RPAREN                        # fim do programa
+#              |  EXPR_BODY RPAREN BODY              # mais um statement
+#   EXPR_BODY  -> ITEM REST1
+#   REST1      -> ε                                 # (MEM) — só um item
+#              |  ITEM REST2
+#   REST2      -> ε                                 # (V MEM) ou (N RES)
+#              |  BINOP                              # (A B op)
+#              |  KW_CTRL3                           # (COND BLOCO IF/WHILE)
+#              |  ITEM ITEM_TAIL
+#   ITEM_TAIL  -> KW_CTRL4                           # (COND THEN ELSE IFELSE)
+#   ITEM       -> NUMERO | IDENT | RES
+#              |  LPAREN EXPR_BODY RPAREN
+#   BINOP      -> + | - | * | / | | | % | ^
 #              |  > | < | == | != | >= | <=
-#   kw_ctrl3   -> IF | WHILE
-#   kw_ctrl4   -> IFELSE
+#   KW_CTRL3   -> IF | WHILE
+#   KW_CTRL4   -> IFELSE
 #
-# Nota sobre a fatoracao de body:
+# Nota sobre a fatoracao de BODY:
 #   Tanto "mais um statement" quanto "fim do programa" começam com LPAREN.
 #   Para resolver esse conflito LL(1), fatoramos à esquerda:
-#   body -> LPAREN body_tail  (consumimos o LPAREN primeiro,
-#   depois decidimos pelo próximo símbolo: END vs. inicio de expr_body)
+#   BODY -> LPAREN BODY_TAIL  (consumimos o LPAREN primeiro,
+#   depois decidimos pelo próximo símbolo: END vs. inicio de EXPR_BODY)
 
 from __future__ import annotations
 
@@ -64,16 +72,20 @@ from .lexer_fsm import (
 # Usamos strings para os terminais. Para operadores, o próprio lexeme.
 # Para parênteses e categorias especiais, nomes simbólicos.
 
-T_LPAREN = "LPAREN"
-T_RPAREN = "RPAREN"
-T_NUMERO = "NUMERO"
-T_IDENT = "IDENT"
-T_RES = "RES"
-T_START = "START"
-T_END = "END"
-T_IF = "IF"
-T_WHILE = "WHILE"
-T_IFELSE = "IFELSE"
+# Convenção EBNF: terminais em minúsculas / literais entre aspas.
+# Os "(" e ")" são literais; os demais são categorias léxicas (numero, ident)
+# ou os próprios lexemas das palavras-reservadas grafados em minúsculas
+# ("res", "start", "end", "if", "while", "ifelse").
+T_LPAREN = "("
+T_RPAREN = ")"
+T_NUMERO = "numero"
+T_IDENT = "ident"
+T_RES = "res"
+T_START = "start"
+T_END = "end"
+T_IF = "if"
+T_WHILE = "while"
+T_IFELSE = "ifelse"
 T_EOF = "$"
 
 # operadores binários aceitos em (A B op)
@@ -121,37 +133,41 @@ def _definicao_gramatica() -> list[tuple[str, list[str]]]:
     # Produção com RHS vazio = produção epsilon.
     producoes: list[tuple[str, list[str]]] = []
 
+    # Convenção EBNF (ISO/IEC 14977 e enunciado da Fase 2):
+    # MAIÚSCULAS = não-terminais, terminais usam o símbolo interno
+    # (LPAREN, NUMERO, IF, …) ou o próprio lexema (operadores).
+
     # 0: ponto de entrada do programa
-    producoes.append(("program", [T_LPAREN, T_START, T_RPAREN, "body"]))
-    # 1: body sempre começa consumindo o LPAREN (fatoração)
-    producoes.append(("body", [T_LPAREN, "body_tail"]))
-    # 2,3: body_tail decide se encontramos o END ou mais um statement
-    producoes.append(("body_tail", [T_END, T_RPAREN]))
-    producoes.append(("body_tail", ["expr_body", T_RPAREN, "body"]))
+    producoes.append(("PROGRAM", [T_LPAREN, T_START, T_RPAREN, "BODY"]))
+    # 1: BODY sempre começa consumindo o LPAREN (fatoração)
+    producoes.append(("BODY", [T_LPAREN, "BODY_TAIL"]))
+    # 2,3: BODY_TAIL decide se encontramos o END ou mais um statement
+    producoes.append(("BODY_TAIL", [T_END, T_RPAREN]))
+    producoes.append(("BODY_TAIL", ["EXPR_BODY", T_RPAREN, "BODY"]))
     # 4: toda expressão é um item seguido de resto
-    producoes.append(("expr_body", ["item", "rest1"]))
-    # 5,6: rest1 — pode ser vazio (ex.: (MEM)) ou ter mais um item
-    producoes.append(("rest1", []))  # ε
-    producoes.append(("rest1", ["item", "rest2"]))
-    # 7-10: rest2 — decide o tipo da expressão pelo que vem depois
-    producoes.append(("rest2", []))  # ε — (V MEM) ou (N RES)
-    producoes.append(("rest2", ["binop"]))         # (A B op)
-    producoes.append(("rest2", ["kw_ctrl3"]))      # (COND BLOCO IF/WHILE)
-    producoes.append(("rest2", ["item", "item_tail"]))  # (COND THEN ELSE IFELSE)
-    # 11: item_tail só pode ser IFELSE (o único operador de 4 operandos)
-    producoes.append(("item_tail", ["kw_ctrl4"]))
-    # 12-15: os tipos possíveis de item
-    producoes.append(("item", [T_NUMERO]))
-    producoes.append(("item", [T_IDENT]))
-    producoes.append(("item", [T_RES]))
-    producoes.append(("item", [T_LPAREN, "expr_body", T_RPAREN]))
+    producoes.append(("EXPR_BODY", ["ITEM", "REST1"]))
+    # 5,6: REST1 — pode ser vazio (ex.: (MEM)) ou ter mais um item
+    producoes.append(("REST1", []))  # ε
+    producoes.append(("REST1", ["ITEM", "REST2"]))
+    # 7-10: REST2 — decide o tipo da expressão pelo que vem depois
+    producoes.append(("REST2", []))  # ε — (V MEM) ou (N RES)
+    producoes.append(("REST2", ["BINOP"]))         # (A B op)
+    producoes.append(("REST2", ["KW_CTRL3"]))      # (COND BLOCO IF/WHILE)
+    producoes.append(("REST2", ["ITEM", "ITEM_TAIL"]))  # (COND THEN ELSE IFELSE)
+    # 11: ITEM_TAIL só pode ser IFELSE (o único operador de 4 operandos)
+    producoes.append(("ITEM_TAIL", ["KW_CTRL4"]))
+    # 12-15: os tipos possíveis de ITEM
+    producoes.append(("ITEM", [T_NUMERO]))
+    producoes.append(("ITEM", [T_IDENT]))
+    producoes.append(("ITEM", [T_RES]))
+    producoes.append(("ITEM", [T_LPAREN, "EXPR_BODY", T_RPAREN]))
     # uma produção por operador binário (simplifica a tabela)
     for op in ("+", "-", "*", "/", "|", "%", "^", ">", "<", "==", "!=", ">=", "<="):
-        producoes.append(("binop", [op]))
+        producoes.append(("BINOP", [op]))
     # palavras-chave de controle
-    producoes.append(("kw_ctrl3", [T_IF]))
-    producoes.append(("kw_ctrl3", [T_WHILE]))
-    producoes.append(("kw_ctrl4", [T_IFELSE]))
+    producoes.append(("KW_CTRL3", [T_IF]))
+    producoes.append(("KW_CTRL3", [T_WHILE]))
+    producoes.append(("KW_CTRL4", [T_IFELSE]))
 
     return producoes
 
@@ -662,6 +678,8 @@ def derivacao_para_texto_tabela(passos: list[dict], tokens: list[Token]) -> str:
         return s if len(s) <= MAX_PILHA else s[:MAX_PILHA - 1] + "…"
 
     def _ent_str(pos: int) -> str:
+        # Mostra os lexemas reais do código-fonte (ex.: "START", "10",
+        # "CONT", "+") — exatamente como aparecem no arquivo de entrada.
         vals = [_escape_md(t.valor) for t in tokens[pos:pos + 10]]
         if pos + 10 < len(tokens):
             vals.append("…")

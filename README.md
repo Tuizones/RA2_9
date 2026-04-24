@@ -19,21 +19,22 @@
 
 > **Índice rápido:**
 > [O que o projeto faz](#1-o-que-o-projeto-faz) ·
-> [Fundamentos teóricos](#1bis-fundamentos-teóricos-llk) ·
 > [Pipeline](#2-pipeline-end-to-end) ·
 > [Estrutura de arquivos](#3-estrutura-do-repositório) ·
 > [A linguagem](#4-a-linguagem) ·
 > [Como executar](#5-como-executar) ·
-> [Gramática LL(1)](#6-gramática-ll1) ·
-> [FIRST e FOLLOW](#7-conjuntos-first-e-follow) ·
-> [Tabela de Análise](#8-tabela-de-análise-ll1) ·
-> [Como o parser funciona](#9-como-o-parser-funciona) ·
-> [A AST](#10-a-árvore-sintática-ast) ·
-> [Geração de Assembly](#11-geração-de-assembly) ·
-> [Testes](#12-arquivos-de-teste) ·
-> [Tratamento de erros](#13-tratamento-de-erros) ·
-> [Distribuição do trabalho](#14-distribuição-do-trabalho) ·
-> [Referências](#15-referências)
+> [API das funções](#6-api--assinaturas-das-funções) ·
+> [Gramática LL(1)](#7-gramática-ll1) ·
+> [Fundamentos teóricos *(opcional)*](#8-fundamentos-teóricos--por-que-ll1) ·
+> [FIRST e FOLLOW](#9-conjuntos-first-e-follow) ·
+> [Tabela de Análise](#10-tabela-de-análise-ll1) ·
+> [Como o parser funciona](#11-como-o-parser-funciona) ·
+> [A AST](#12-a-árvore-sintática-ast) ·
+> [Geração de Assembly](#13-geração-de-assembly) ·
+> [Testes](#14-arquivos-de-teste) ·
+> [Tratamento de erros](#15-tratamento-de-erros) ·
+> [Distribuição do trabalho](#16-distribuição-do-trabalho) ·
+> [Referências](#17-referências)
 
 ---
 
@@ -64,142 +65,6 @@ Pilha: [ "(" start ")" BODY $ ]
 ```
 
 ---
-
-<a id="1bis-fundamentos-teóricos-llk"></a>
-
-## 1.bis. Fundamentos Teóricos — Por que LL(1)?
-
-Esta seção condensa a teoria de Linguagens Formais e Compiladores que **justifica**
-cada decisão de projeto da nossa gramática e do nosso parser. Todas as escolhas
-que você verá no código (ordem das regras, fatoração de `BODY`, `REST1`/`REST2`
-anuláveis, palavras-chave no fim de cada estrutura de controle) são consequência
-direta dos conceitos abaixo.
-
-### 1.bis.1. Hierarquia das Gramáticas (perspectiva LL)
-
-```
-Gram_LL(k+1)  ⊃  Gram_LL(k)  ⊃  …  ⊃  Gram_LL(1)  ⊃  Gram_Regulares
-```
-
-- **LL(k)** — gramáticas reconhecidas por parsers _top-down_ que derivam
-  **L**eftmost, lendo da esquerda (**L**eft-to-right) com `k` símbolos de
-  lookahead. Quanto maior o `k`, mais gramáticas aceitas — `LL(1)` é o caso
-  mais restrito (e o mais usado por ser eficiente e implementável à mão).
-- **LL(1)** — apenas **1** símbolo de lookahead basta para escolher a
-  produção. Garantida pela **condição LL(1)** (ver § 1.bis.4).
-- **Regulares** — caso particular: `A → a` ou `A → aB`. Equivalentes a
-  autômatos finitos / expressões regulares (justamente a Fase 1 deste projeto).
-
-Neste trabalho usamos **LL(1)** porque queremos um parser implementado à mão,
-legível, com tabela construída automaticamente e diagnóstico de erro preciso.
-
-### 1.bis.2. Classificação de Parsers Top-down
-
-```mermaid
-flowchart TD
-    P[parsers top-down] --> RD[recursive descent<br/>uma função por não-terminal]
-    P --> LL["LL(k)\n dirigido por tabela"]
-    LL --> PRED["predictive parser\n tabela M[A,a]\n + pilha + 1 lookahead"]
-
-    classDef ours fill:#dcfce7,stroke:#16a34a,stroke-width:2px
-    class LL,PRED ours
-```
-
-O caminho destacado em verde é o que implementamos: parser **top-down**,
-**LL(1)**, **dirigido por tabela** (predictive parser).
-
-### 1.bis.3. Ambiguidade vs. Previsibilidade
-
-Uma gramática é **ambígua** se existe alguma sentença `w` da linguagem que
-admite **duas árvores de derivação distintas** (ou, equivalentemente, duas
-derivações leftmost diferentes). Ambiguidade é uma propriedade **semântica**
-da gramática.
-
-**LL(1) é uma propriedade mais forte** que não-ambiguidade:
-
-- Toda gramática `LL(1)` é não-ambígua. 
-- Existem gramáticas não-ambíguas que **não** são `LL(1)` (por exemplo, com
-  recursão à esquerda ou prefixos comuns não-fatorados). 
-
-O parser `LL(1)` precisa decidir **qual produção aplicar** olhando **apenas
-1 símbolo à frente**. Para isso, a tabela `M[A, a]` deve ter **no máximo uma
-entrada** por célula — a chamada **condição LL(1)**.
-
-### 1.bis.4. A Condição LL(1) (FIRST disjuntos)
-
-> **Definição formal** — Para todo não-terminal `A` com produções
-> `A → α₁ | α₂ | … | αₙ`, vale:
->
-> 1. `FIRST(αᵢ) ∩ FIRST(αⱼ) = ∅` para todo `i ≠ j`.
-> 2. Se `ε ∈ FIRST(αᵢ)` para algum `i`, então
->    `FIRST(αⱼ) ∩ FOLLOW(A) = ∅` para todo `j ≠ i`.
-
-Na prática isso significa: **olhando 1 token, só uma regra é aplicável**.
-Duas situações típicas violam essa condição e exigem reescrita da gramática:
-
-#### Recursão à esquerda
-
-`A → A α | β` faz o parser tentar expandir `A` para sempre, sem consumir
-token algum (loop infinito). A transformação canônica é:
-
-```
-A   → β A'
-A'  → α A' | ε
-```
-
-_Aplicação no nosso projeto:_ não temos recursão à esquerda direta porque
-**toda** expressão da linguagem começa obrigatoriamente com `(`, e
-`EXPR_BODY → ITEM REST1` consome esse `(` (via `ITEM → "(" EXPR_BODY ")"`)
-antes de qualquer recursão.
-
-#### Fatoração à esquerda
-
-Duas regras com prefixo comum (`A → α β₁ | α β₂`) impedem decisão preditiva.
-A transformação canônica fatora o prefixo:
-
-```
-A   → α A'
-A'  → β₁ | β₂
-```
-
-_Aplicação no nosso projeto:_ tanto **"fim do programa"** `(END)` quanto
-**"mais um statement"** `(EXPR…)` começam com `(`. Em vez de
-
-```
-BODY → "(" end ")"
-     | "(" EXPR_BODY ")" BODY      ← prefixo comum "("
-```
-
-fatoramos para:
-
-```
-BODY      → "(" BODY_TAIL
-BODY_TAIL → end ")"
-          | EXPR_BODY ")" BODY     ← agora 1 lookahead resolve
-```
-
-Após consumir o `(`, o próximo token (`end` vs. `numero`/`ident`/`(`/`res`)
-identifica unicamente qual alternativa aplicar.
-
-### 1.bis.5. Por que palavras-chave no FINAL
-
-Em linguagens tradicionais (C, Java) a palavra-chave aparece no **início**:
-`if (cond) { … }`. Numa linguagem RPN como a nossa, **a sintaxe pós-fixada
-facilita LL(1)**: colocando `IF`/`WHILE`/`IFELSE` no fim, o parser primeiro
-lê todos os operandos como `ITEM` e só depois usa um lookahead para decidir
-se é um operador binário, uma estrutura de controle de 3 elementos
-(`IF`/`WHILE`) ou de 4 (`IFELSE`):
-
-```
-REST2 → ε                  ; (V MEM)  ou  (N RES)
-      | BINOP               ; (A B op)
-      | KW_CTRL3            ; (COND BLOCO IF/WHILE)
-      | ITEM ITEM_TAIL      ; (COND THEN ELSE IFELSE)
-```
-
-Os `FIRST` de cada alternativa são **disjuntos** por construção:
-`FIRST(BINOP) = {+,-,*,/,…}`, `FIRST(KW_CTRL3) = {IF, WHILE}`,
-`FIRST(ITEM) = {(, numero, ident, RES}` — sem sobreposição. ✓
 
 ---
 
@@ -300,7 +165,6 @@ e termina com `(END)` — uma instrução por linha.
 | `%` | Resto da divisão inteira | `(10 3 %)` | `1` |
 | `^` | Potenciação | `(2 5 ^)` | `32` |
 
-> **Alterado de `\\` para `|` nessa atividade** 
 
 ### 4.2. Operadores relacionais
 
@@ -431,7 +295,138 @@ Resultado esperado: **37 testes**, todos passando.
 
 ---
 
-## 6. Gramática LL(1)
+## 6. API — Assinaturas das Funções
+
+Referência rápida de **o que cada função recebe e devolve**, com exemplos reais do projeto.
+
+### Léxico — `src/lexer_fsm.py`
+
+```python
+@dataclass
+class Token:
+    tipo:   str   # "NUMERO" | "OPERADOR" | "PARENTESE_ABRE" | "PARENTESE_FECHA"
+                  # | "KEYWORD" | "IDENTIFICADOR"
+    valor:  str   # lexema exato
+    linha:  int
+    coluna: int
+```
+
+#### `tokenizar_linha(linha: str, numero_linha: int = 1) -> list[Token]`
+
+**Recebe** uma linha de código e o número dela. **Devolve** a lista de `Token` daquela linha.
+
+```python
+>>> tokenizar_linha("(10 3 +)", numero_linha=1)
+[Token('PARENTESE_ABRE',  '(',  1, 1),
+ Token('NUMERO',          '10', 1, 2),
+ Token('NUMERO',          '3',  1, 5),
+ Token('OPERADOR',        '+',  1, 7),
+ Token('PARENTESE_FECHA', ')',  1, 8)]
+```
+
+#### `tokenizar_programa(linhas: list[str]) -> list[Token]`
+
+**Recebe** a lista de linhas do fonte. **Devolve** a lista **flat** de todos os tokens, com `linha` preservado.
+
+---
+
+### Pipeline — `src/pipeline.py`
+
+#### `lerArquivo(nomeArquivo: str, linhas: list[str]) -> None`
+
+**Recebe** o caminho do `.txt` e uma lista **mutável**. **Devolve** `None` — preenche `linhas` in-place, descartando comentários (`#`) e linhas em branco.
+
+```python
+linhas = []
+lerArquivo("teste1.txt", linhas)
+# linhas[0]  == "(START)"
+# linhas[1]  == "(10 3 +)"
+# len(linhas) == 16
+```
+
+#### `salvarTokens(caminho: str | Path, tokens_por_linha: list[list[Token]]) -> None`
+
+**Recebe** o caminho de saída e uma **lista de listas de Token** (uma sub-lista por linha do fonte). **Devolve** `None` — grava o arquivo no formato `linha_N;TIPO:valor,...`.
+
+#### `lerTokens(nomeArquivo: str) -> list[Token]`
+
+**Recebe** o caminho de um arquivo gerado por `salvarTokens`. **Devolve** a lista flat de `Token` reconstruída.
+
+#### `gerarAssembly(arvore_programa: dict) -> str`
+
+**Recebe** a AST (`dict` com raiz `{"tipo": "program", "stmts": [...]}`). **Devolve** o código Assembly ARMv7 completo como string.
+
+#### `exibirResultados(resultados: list[dict]) -> None`
+
+**Recebe** uma lista de dicts com chave `"descricao"`. **Devolve** `None` — imprime `"Linha N: <descricao>"` para cada item.
+
+#### `executar_fase2(caminho_fonte, caminho_tokens, caminho_asm, caminho_arvore) -> dict`
+
+Orquestrador. **Recebe** quatro caminhos (todos `str`). **Devolve** um `dict` com **todas** as saídas intermediárias:
+
+| Chave | Tipo | Conteúdo |
+|---|---|---|
+| `linhas` | `list[str]` | Linhas lidas (sem comentários) |
+| `tokens` | `list[Token]` | Tokens flat |
+| `gramatica` | `dict` | Saída de `construirGramatica()` |
+| `derivacao` | `list[dict]` | Expansões LL(1) (leftmost) |
+| `passos` | `list[dict]` | Log completo da pilha |
+| `arvore` | `dict` | AST semântica |
+| `assembly` | `str` | Código Assembly gerado |
+
+---
+
+### Parser — `src/parser_ll1.py`
+
+#### `construirGramatica() -> dict`
+
+**Recebe** nada (gramática fixa). **Devolve** um `dict` com 7 chaves:
+
+| Chave | Tipo | Conteúdo |
+|---|---|---|
+| `producoes` | `list[tuple[str, list[str]]]` | 32 regras `(LHS, [símbolos])`, indexadas 0–31 |
+| `nao_terminais` | `set[str]` | 11 não-terminais |
+| `terminais` | `set[str]` | Vocabulário terminal + `"$"` |
+| `inicial` | `str` | `"PROGRAM"` |
+| `first` | `dict[str, set[str]]` | FIRST de cada não-terminal |
+| `follow` | `dict[str, set[str]]` | FOLLOW de cada não-terminal |
+| `tabela` | `dict[tuple[str, str], int]` | 57 entradas `{(NT, terminal): índice}` |
+
+```python
+>>> g = construirGramatica()
+>>> g["producoes"][0]
+('PROGRAM', ['(', 'start', ')', 'BODY'])
+>>> g["tabela"][("ITEM", "numero")]
+12
+>>> g["tabela"][("REST2", "+")]
+8
+```
+
+#### `parsear(tokens: list[Token], tabela_ll1: dict) -> dict`
+
+**Recebe** a lista flat de tokens e o dict da gramática. **Devolve** `{"derivacao": list[dict], "passos": list[dict], "tokens": list[Token]}`. Lança `Erros` em caso de falha sintática.
+
+```python
+>>> r = parsear(tokens, g)
+>>> r["derivacao"][0]
+{'idx': 0, 'lhs': 'PROGRAM', 'rhs': ['(', 'start', ')', 'BODY']}
+```
+
+#### `gerarArvore(resultado_parse: dict) -> dict`
+
+**Recebe** o dict de `parsear()` (usa apenas `"tokens"`). **Devolve** a AST semântica como dict aninhado (tipos em §12.1).
+
+```python
+>>> arv = gerarArvore(r)
+>>> arv["stmts"][0]
+{'tipo': 'binary', 'op': '+',
+ 'esq': {'tipo': 'number', 'valor': '10'},
+ 'dir': {'tipo': 'number', 'valor': '3'}}
+```
+
+---
+
+## 7. Gramática LL(1)
 
 Convenção (ISO/IEC 14977 — EBNF):
 **MAIÚSCULAS** = não-terminais · **minúsculas** = categorias léxicas
@@ -439,7 +434,7 @@ terminais (`numero`, `ident`) · **literais entre aspas** = terminais
 exatos (`"("`, `"+"`, `if`) · `[ ]` opcional · `{ }` repetição (0+) ·
 `|` alternativa · `ε` = cadeia vazia · `$` = fim de entrada.
 
-### 6.1. Forma EBNF (canônica)
+### 7.1. Forma EBNF (canônica)
 
 #### Como ler EBNF (símbolos da meta-linguagem)
 
@@ -511,7 +506,7 @@ poderia ter dado zero (`(START)(END)`) ou várias.
 > faz o mapeamento `lexema MAIÚSCULO ↔ terminal minúsculo` que o
 > [`_token_para_terminal`](src/parser_ll1.py) implementa.
 
-> **Por que ainda precisamos da BNF da § 6.2.** EBNF é ótima para
+> **Por que ainda precisamos da BNF da § 7.2.** EBNF é ótima para
 > humanos mas a tabela LL(1) só sabe consultar regras no formato
 > `A → α` (sem `{ }` ou `[ ]`). Cada `{ ... }` e `[ ... ]` precisa ser
 > traduzido para um novo não-terminal recursivo/anulável. Por exemplo,
@@ -520,7 +515,25 @@ poderia ter dado zero (`(START)(END)`) ou várias.
 > "acabou" (`end ")"`) e "vem mais um statement" (`EXPR_BODY ")" BODY`).
 > Mesma informação, formato diferente.
 
-### 6.2. Forma BNF fatorada (numerada — base da tabela LL(1))
+### 7.2. Forma BNF fatorada (numerada — base da tabela LL(1))
+
+> **Mapeamento EBNF ↔ BNF interna.** Os nomes na §7.1 (EBNF, voltada para
+> humanos) e os nomes na tabela abaixo (BNF, consumida pela tabela LL(1))
+> referem-se à **mesma gramática** — os símbolos extras existem só porque
+> o formato BNF não tem `{ }` nem `[ ]` e precisa simular essas construções
+> com não-terminais auxiliares.
+>
+> | Símbolo na EBNF (§7.1) | Símbolo(s) na BNF (§7.2) | Por que mudou |
+> |---|---|---|
+> | `PROGRAM` | `PROGRAM` + `BODY` + `BODY_TAIL` | a repetição `{ "(" EXPR_BODY ")" }` virou `BODY` recursivo, e `BODY → "(" BODY_TAIL` fatora o `(` comum entre "mais um statement" e `(end)` |
+> | `EXPR_BODY` (1 ou 2+ itens) | `EXPR_BODY` + `REST1` (anulável) | `REST1 → ε` cobre o caso de 1 item; `REST1 → ITEM REST2` cobre 2+ |
+> | `TAIL` (opcional após 2 itens) | `REST2` (anulável) | a opcionalidade `[ TAIL ]` virou `REST2 → ε \| BINOP \| KW_CTRL3 \| ITEM ITEM_TAIL` |
+> | `ITEM , KW_CTRL4` (caminho do IFELSE) | `ITEM_TAIL → KW_CTRL4` | dá um nome próprio à "cauda" do IFELSE para que `REST2 → ITEM ITEM_TAIL` fique determinístico |
+> | `ITEM`, `BINOP`, `KW_CTRL3`, `KW_CTRL4` | iguais | já estavam em forma BNF |
+>
+> Resumindo: `BODY`, `BODY_TAIL`, `REST1`, `REST2` e `ITEM_TAIL` **não são**
+> conceitos novos — são apenas a forma "achatada" exigida pela tabela `M[A,a]`.
+
 
 A EBNF acima é traduzida para BNF onde cada `[ ]` / `{ }` vira um
 não-terminal anulável (`REST1`, `REST2`, `ITEM_TAIL`, `BODY`,
@@ -559,7 +572,7 @@ e em `output/derivacao_ultima_execucao.md`.
 > Identificadores de memória (ex.: `VARA`) viram a categoria `ident`,
 > e números (`10`, `3.14`) viram `numero`
 
-### 6.3. Por que essa gramática é LL(1)?
+### 7.3. Por que essa gramática é LL(1)?
 
 Três decisões de projeto garantem que nunca há conflito:
 
@@ -588,7 +601,7 @@ se uma célula da tabela recebesse 2 produções, lançaria
 `Erros("Gramática não é LL(1):\n  M[A, t] tem múltiplas produções: ...")`
 (ver `_construir_tabela_ll1` em `src/parser_ll1.py`).
 
-### 6.4. Exemplos canônicos das transparências
+### 7.4. Exemplos canônicos das transparências
 
 Esta subseção aplica os algoritmos de transformação aos dois exemplos clássicos
 usados nas aulas, reforçando o porquê da forma final da nossa gramática.
@@ -629,13 +642,106 @@ S'  → else S  |  ε            ← 1 lookahead distingue
 ```
 
 No nosso projeto, o problema análogo — dois statements começando com `(` —
-foi resolvido pela mesma técnica em `BODY → "(" BODY_TAIL` (ver § 6.3).
+foi resolvido pela mesma técnica em `BODY → "(" BODY_TAIL` (ver § 7.3).
 
 ---
 
-## 7. Conjuntos FIRST e FOLLOW
+## 8. Fundamentos Teóricos — Por que LL(1)?
 
-### 7.1. Definições formais
+> **Esta seção é opcional / aprofundamento teórico.** Se você só quer rodar o projeto, pular direto para §9 (FIRST/FOLLOW) ou voltar para §5 (Como Executar) é seguro — nada do que vem abaixo é necessário para usar a ferramenta. Aqui justificamos *por que* a gramática tem o formato que tem, em termos da teoria da disciplina.
+
+Esta seção condensa a teoria de Linguagens Formais e Compiladores que **justifica**
+cada decisão de projeto da nossa gramática e do nosso parser. Todas as escolhas
+que você verá no código (ordem das regras, fatoração de `BODY`, `REST1`/`REST2`
+anuláveis, palavras-chave no fim de cada estrutura de controle) são consequência
+direta dos conceitos abaixo.
+
+### 8.1. Hierarquia das Gramáticas (perspectiva LL)
+
+```
+Gram_LL(k+1)  ⊃  Gram_LL(k)  ⊃  …  ⊃  Gram_LL(1)  ⊃  Gram_Regulares
+```
+
+- **LL(k)** — gramáticas reconhecidas por parsers _top-down_ que derivam
+  **L**eftmost, lendo da esquerda (**L**eft-to-right) com `k` símbolos de
+  lookahead. Quanto maior o `k`, mais gramáticas aceitas — `LL(1)` é o caso
+  mais restrito (e o mais usado por ser eficiente e implementável à mão).
+- **LL(1)** — apenas **1** símbolo de lookahead basta para escolher a
+  produção. Garantida pela **condição LL(1)** (ver § 8.4).
+- **Regulares** — caso particular: `A → a` ou `A → aB`. Equivalentes a
+  autômatos finitos / expressões regulares (justamente a Fase 1 deste projeto).
+
+Neste trabalho usamos **LL(1)** porque queremos um parser implementado à mão,
+legível, com tabela construída automaticamente e diagnóstico de erro preciso.
+
+### 8.2. Classificação de Parsers Top-down
+
+```mermaid
+flowchart TD
+    P[parsers top-down] --> RD[recursive descent<br/>uma função por não-terminal]
+    P --> LL["LL(k)\n dirigido por tabela"]
+    LL --> PRED["predictive parser\n tabela M[A,a]\n + pilha + 1 lookahead"]
+
+    classDef ours fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    class LL,PRED ours
+```
+
+O caminho destacado em verde é o que implementamos: parser **top-down**,
+**LL(1)**, **dirigido por tabela** (predictive parser).
+
+### 8.3. Ambiguidade vs. Previsibilidade
+
+Uma gramática é **ambígua** se existe alguma sentença `w` da linguagem que
+admite **duas árvores de derivação distintas** (ou, equivalentemente, duas
+derivações leftmost diferentes). Ambiguidade é uma propriedade **semântica**
+da gramática.
+
+**LL(1) é uma propriedade mais forte** que não-ambiguidade:
+
+- Toda gramática `LL(1)` é não-ambígua. 
+- Existem gramáticas não-ambíguas que **não** são `LL(1)` (por exemplo, com
+  recursão à esquerda ou prefixos comuns não-fatorados). 
+
+O parser `LL(1)` precisa decidir **qual produção aplicar** olhando **apenas
+1 símbolo à frente**. Para isso, a tabela `M[A, a]` deve ter **no máximo uma
+entrada** por célula — a chamada **condição LL(1)**.
+
+### 8.4. A Condição LL(1) (FIRST disjuntos)
+
+> Para `A → α₁ | … | αₙ`: **`FIRST(αᵢ) ∩ FIRST(αⱼ) = ∅`** para `i ≠ j`. Se `ε ∈ FIRST(αᵢ)`, então `FIRST(αⱼ) ∩ FOLLOW(A) = ∅` para `j ≠ i`.
+
+Na prática: **1 token de lookahead identifica univocamente a regra**. Duas situações típicas violam isso:
+
+| Problema | Forma original | Transformação canônica | Como resolvemos |
+|---|---|---|---|
+| **Recursão à esquerda** | `A → Aα \| β` | `A → β A'` ; `A' → α A' \| ε` | Não temos — toda expressão começa com `(`, consumido por `ITEM → "(" EXPR_BODY ")"` antes de qualquer recursão |
+| **Prefixo comum** | `A → α β₁ \| α β₂` | `A → α A'` ; `A' → β₁ \| β₂` | `BODY → "(" BODY_TAIL` consome o `(` antes de decidir entre `end` (#2) ou `EXPR_BODY` (#3) |
+
+### 8.5. Por que palavras-chave no FINAL
+
+Em linguagens tradicionais (C, Java) a palavra-chave aparece no **início**:
+`if (cond) { … }`. Numa linguagem RPN como a nossa, **a sintaxe pós-fixada
+facilita LL(1)**: colocando `IF`/`WHILE`/`IFELSE` no fim, o parser primeiro
+lê todos os operandos como `ITEM` e só depois usa um lookahead para decidir
+se é um operador binário, uma estrutura de controle de 3 elementos
+(`IF`/`WHILE`) ou de 4 (`IFELSE`):
+
+```
+REST2 → ε                  ; (V MEM)  ou  (N RES)
+      | BINOP               ; (A B op)
+      | KW_CTRL3            ; (COND BLOCO IF/WHILE)
+      | ITEM ITEM_TAIL      ; (COND THEN ELSE IFELSE)
+```
+
+Os `FIRST` de cada alternativa são **disjuntos** por construção:
+`FIRST(BINOP) = {+,-,*,/,…}`, `FIRST(KW_CTRL3) = {IF, WHILE}`,
+`FIRST(ITEM) = {(, numero, ident, RES}` — sem sobreposição. ✓
+
+---
+
+## 9. Conjuntos FIRST e FOLLOW
+
+### 9.1. Definições formais
 
 > **FIRST(α)** — conjunto de **terminais** que podem **iniciar** uma cadeia
 > derivada de α (sequência de terminais e não-terminais).
@@ -647,7 +753,7 @@ Ambos são calculados por **algoritmo de ponto-fixo** em
 `construirGramatica()`: a regra é reaplicada até que nenhum conjunto cresça
 mais.
 
-### 7.2. Algoritmo de FIRST
+### 9.2. Algoritmo de FIRST
 
 | # | Caso | Ação |
 |:---:|---|---|
@@ -682,31 +788,9 @@ while mudou:                              # ponto fixo
             first[lhs].add(EPSILON)
 ```
 
-**Lógica linha-a-linha:**
-- `first = {nt: set()}` — começa todos os FIRST vazios; só vamos
-  **adicionar** elementos (monotonia garante terminação).
-- `while mudou` — laço de **ponto fixo**: continua enquanto algum
-  conjunto crescer numa passagem completa.
-- `if not rhs` — produção `A → ε`; o único caso em que `ε` entra
-  diretamente em `FIRST(A)`.
-- `anulavel = True` — flag que registra se **todos** os símbolos do
-  RHS vistos até agora podem derivar `ε`. Se sim, ao final do laço
-  o próprio `A` é anulável (caso 3).
-- `if _eh_terminal(sim, ...)` — terminal: adiciona literalmente e
-  para (`break`) — terminal nunca deriva `ε`.
-- `first[lhs].update(first[sim] - {EPSILON})` — não-terminal: copia
-  o FIRST dele **sem** o `ε` (o ε é mero sinalizador de
-  "continue olhando o próximo símbolo").
-- `if EPSILON not in first[sim]: break` — se o NT atual **não** é
-  anulável, paramos: o que vem depois dele não influencia FIRST(A).
-- O `if anulavel:` final cobre o caso 3: se todo o RHS pode sumir,
-  então `A` também pode produzir a cadeia vazia.
+> Monotonia (só adicionamos elementos) garante terminação. A flag `anulavel` rastreia se **todos** os símbolos vistos derivam `ε`; em caso afirmativo, `A` é anulável (caso 3). A função auxiliar `_first_de_sequencia(seq)` aplica o mesmo princípio a uma cadeia arbitrária — base do cálculo de FOLLOW e da tabela.
 
-A função auxiliar `_first_de_sequencia(seq)` calcula `FIRST` de uma
-cadeia (`X1 X2 …`) seguindo o mesmo princípio — é a base do cálculo
-de FOLLOW e da construção da tabela.
-
-### 7.3. Algoritmo de FOLLOW
+### 9.3. Algoritmo de FOLLOW
 
 | # | Caso | Ação |
 |:---:|---|---|
@@ -739,28 +823,9 @@ while mudou:
                 follow[sim].update(follow[lhs])           # caso 3
 ```
 
-**Lógica linha-a-linha:**
-- `follow[inicial].add(T_EOF)` — caso 1 do algoritmo: o símbolo
-  inicial sempre tem `$` em seu FOLLOW (fim de entrada é o que
-  vem "depois" da raiz).
-- `for i, sim in enumerate(rhs)` — varremos cada posição do RHS.
-  Só nos interessam **não-terminais** (terminais não têm FOLLOW).
-- `cauda = rhs[i + 1:]` — é o `β` do algoritmo: tudo que aparece
-  **depois** de `B` na produção `A → α B β`.
-- `_first_de_sequencia(cauda, ...)` — calcula `FIRST(β)` (pode
-  conter `ε` se toda a cauda for anulável).
-- `follow[sim].update(first_cauda - {EPSILON})` — caso 2: tudo
-  que pode aparecer **logo após** `B` (sem o ε, que não é terminal
-  real).
-- `if EPSILON in first_cauda or not cauda` — caso 3: se a cauda
-  some (vazia ou anulável), então o que vem depois de `A` também
-  vem depois de `B`, logo `FOLLOW(A) ⊆ FOLLOW(B)`.
+> Tradução direta do algoritmo: `cauda = rhs[i+1:]` é o `β`; `first_cauda - {ε}` cobre o caso 2; quando `β` é vazio ou anulável, propagamos `FOLLOW(A)` para `FOLLOW(B)` (caso 3) — exatamente uma linha: `follow[sim].update(follow[lhs])`.
 
-Observe como o caso 3 ("se β deriva ε ou está ausente, propague
-FOLLOW(A) para FOLLOW(B)") se traduz literalmente em uma linha:
-`follow[sim].update(follow[lhs])`.
-
-### 7.4. Conjuntos calculados para nossa gramática
+### 9.4. Conjuntos calculados para nossa gramática
 
 > Nas tabelas abaixo os terminais aparecem na convenção EBNF:
 > categorias léxicas em minúsculas (`numero`, `ident`) e literais entre
@@ -769,7 +834,7 @@ FOLLOW(A) para FOLLOW(B)") se traduz literalmente em uma linha:
 > [output/gramatica_dump.md](output/gramatica_dump.md) usa o mesmo
 > alfabeto.
 
-### 7.5. FIRST
+### 9.5. FIRST
 
 | Não-Terminal | FIRST |
 |---|---|
@@ -785,7 +850,7 @@ FOLLOW(A) para FOLLOW(B)") se traduz literalmente em uma linha:
 | `KW_CTRL3`  | { `if`, `while` } |
 | `KW_CTRL4`  | { `ifelse` } |
 
-### 7.6. FOLLOW
+### 9.6. FOLLOW
 
 | Não-Terminal | FOLLOW |
 |---|---|
@@ -801,11 +866,50 @@ FOLLOW(A) para FOLLOW(B)") se traduz literalmente em uma linha:
 | `KW_CTRL3`  | { `")"` } |
 | `KW_CTRL4`  | { `")"` } |
 
+### 9.7. Exemplo prático — calculando FIRST(REST2)
+
+`REST2` tem 4 produções (#7–#10). O algoritmo as percorre e adiciona terminais em FIRST(REST2):
+
+| Produção | Contribuição | FIRST(REST2) ao final |
+|---|---|---|
+| `REST2 → ε` (#7) | adiciona `ε` (caso especial) | `{ε}` |
+| `REST2 → BINOP` (#8) | `FIRST(BINOP) − {ε}` = 13 operadores | `{ε, +, −, *, /, \|, %, ^, >, <, ==, !=, >=, <=}` |
+| `REST2 → KW_CTRL3` (#9) | `FIRST(KW_CTRL3) = {if, while}` | `… ∪ {if, while}` |
+| `REST2 → ITEM ITEM_TAIL` (#10) | `FIRST(ITEM) − {ε}` = `{(, numero, ident, res}` (ITEM não é anulável → para aqui) | `… ∪ {(, numero, ident, res}` |
+
+**Verificação:**
+
+```python
+>>> sorted(g["first"]["REST2"] - {"ε"})
+['(', '!=', '%', '*', '+', '-', '/', '<', '<=', '==', '>',
+ '>=', '^', '|', 'ident', 'if', 'numero', 'res', 'while']
+```
+
+### 9.8. Exemplo prático — calculando FOLLOW(ITEM)
+
+`ITEM` aparece no RHS de 3 produções (#4, #6, #10). Cada ocorrência contribui:
+
+| Produção | Cauda β após ITEM | Adiciona a FOLLOW(ITEM) |
+|---|---|---|
+| `EXPR_BODY → ITEM REST1` (#4) | `REST1` | `FIRST(REST1) − {ε}` ; e como `ε ∈ FIRST(REST1)` → também `FOLLOW(EXPR_BODY) = {)}` |
+| `REST1 → ITEM REST2` (#6) | `REST2` | `FIRST(REST2) − {ε}` ; e como `ε ∈ FIRST(REST2)` → também `FOLLOW(REST1) = {)}` |
+| `REST2 → ITEM ITEM_TAIL` (#10) | `ITEM_TAIL` | `FIRST(ITEM_TAIL) = {ifelse}` |
+
+**Verificação:**
+
+```python
+>>> sorted(g["follow"]["ITEM"])
+['(', ')', '!=', '%', '*', '+', '-', '/', '<', '<=', '==', '>',
+ '>=', '^', '|', 'ident', 'if', 'ifelse', 'numero', 'res', 'while']
+```
+
+FOLLOW(ITEM) é grande porque ITEM é o operando universal: pode aparecer antes de operador, antes de keyword, antes de outro item, ou antes do `)` final.
+
 ---
 
-## 8. Tabela de Análise LL(1)
+## 10. Tabela de Análise LL(1)
 
-### 8.1. Algoritmo de construção
+### 10.1. Algoritmo de construção
 
 Conforme apresentado nas aulas, a tabela `M[A, a]` é construída a partir dos
 conjuntos FIRST e FOLLOW com o seguinte algoritmo:
@@ -846,31 +950,11 @@ if conflitos:
     raise Erros("Gramática não é LL(1):\n  " + "\n  ".join(conflitos))
 ```
 
-**Lógica linha-a-linha:**
-- `for idx, (lhs, rhs) in enumerate(producoes)` — cada produção
-  recebe um índice estável (0..31). Esse índice é o que aparece
-  nas células da tabela e na coluna "#" da derivação.
-- `first_rhs = _first_de_sequencia(rhs, ...)` — calcula
-  `FIRST(α)` para o lado direito da produção atual. Se o RHS for
-  vazio, retorna `{ε}`.
-- `for term in first_rhs - {EPSILON}` — **passo 1** do algoritmo:
-  para cada terminal real em FIRST(α), `M[A, t] = idx`. ε é
-  excluído porque não é terminal de entrada.
-- `if chave in tabela and tabela[chave] != idx` — detecta
-  conflito: a célula já está ocupada por outra produção. Note o
-  `!= idx` — uma mesma produção pode contribuir 2 vezes via
-  caminhos diferentes (FIRST + FOLLOW), e isso **não** é conflito.
-- `if EPSILON in first_rhs` — **passo 2**: se a produção pode
-  derivar `ε`, ela também responde por todos os terminais que
-  podem aparecer **depois** de `A` (FOLLOW(A)).
-- `raise Erros(...)` — se qualquer conflito foi detectado, a
-  construção falha imediatamente. Isso é nosso teste empírico de
-  que a gramática é LL(1).
+> Cada produção tem índice fixo (0–31), é o que aparece nas células. O teste `tabela[chave] != idx` é importante: uma mesma produção pode contribuir via FIRST e via FOLLOW (pelo caso ε) — isso **não** é conflito. A construção falha imediatamente se qualquer conflito real for detectado.
 
-Resultado para nossa gramática: **57 entradas, 0 conflitos** — confirmado a
-cada execução em [output/gramatica_dump.md](output/gramatica_dump.md).
+**Por que 32 produções geram 57 entradas?** Cada produção `A → α` produz **uma entrada por terminal em FIRST(α)** (e uma por terminal em FOLLOW(A) se `α ⇒* ε`). Por exemplo, `REST2 → BINOP` (#8) sozinha gera 13 entradas — uma para cada operador em `FIRST(BINOP)`. Resultado para nossa gramática: **57 entradas, 0 conflitos** — confirmado a cada execução em [output/gramatica_dump.md](output/gramatica_dump.md).
 
-### 8.2. Entradas da tabela (formato plano)
+### 10.2. Entradas da tabela (formato plano)
 
 Cada célula `M[A, a]` indica qual produção aplicar quando o **topo da pilha**
 é o não-terminal `A` e o **token corrente** é `a`.
@@ -895,7 +979,7 @@ Células não listadas = **erro sintático**.
 | `M[ITEM, res]` | `ITEM → res` |
 | `M[ITEM, "("]` | `ITEM → "(" EXPR_BODY ")"` |
 
-### 8.3. Formato matricial M[A, a] — tabela completa
+### 10.3. Formato matricial M[A, a] — tabela completa
 
 Número = índice da produção. `—` = erro sintático.
 Uma única tabela com **todos** os terminais (tokens, palavras-chave, operadores e `$`).
@@ -958,9 +1042,9 @@ A documentação formal com o algoritmo e a tabela estática está em
 
 ---
 
-## 9. Como o Parser Funciona
+## 11. Como o Parser Funciona
 
-### 9.0. Parser preditivo LL(1) dirigido por tabela
+### 11.0. Parser preditivo LL(1) dirigido por tabela
 
 Nosso parser é **top-down, LL(1), dirigido por tabela**. Suas características:
 
@@ -979,7 +1063,7 @@ A cada passo o parser olha o **topo da pilha** e o **token corrente**:
 se o topo é terminal, casa-e-consome; se é não-terminal, consulta `M[topo, token]`
 para descobrir qual produção aplicar.
 
-### 9.1. O algoritmo de pilha
+### 11.1. O algoritmo de pilha
 
 ```python
 gram   = construirGramatica()         # gramática + FIRST/FOLLOW + tabela
@@ -1047,32 +1131,9 @@ while pilha:
         pilha.append(sim)
 ```
 
-**Lógica linha-a-linha:**
-- `pilha = [T_EOF, inicial]` — convenção: **topo à direita**
-  (`pop()` retorna o último). O `$` no fundo casa com o `$` que
-  acrescentamos ao buffer; quando os dois se encontram, aceita.
-- `topo = pilha.pop()` — desempilha o símbolo que esperamos ver
-  **agora**.
-- `if topo == T_EOF` — só ocorre quando a pilha esvazia
-  totalmente (o `$` foi atingido). Se o token corrente também é
-  `$`, a entrada é aceita; senão sobraram tokens.
-- `if topo not in nao_terminais` — **terminal no topo**:
-  estratégia "casa-e-consome". Se casar, avança o cursor `i` da
-  entrada; se não casar, é erro sintático com mensagem precisa.
-- `chave = (topo, terminal_atual)` — **não-terminal no topo**:
-  monta a chave de consulta da tabela LL(1).
-- `if chave not in tabela` — célula vazia = erro sintático. A
-  mensagem cita exatamente qual NT estava no topo e qual token
-  encontrou — nosso melhor diagnóstico.
-- `for sim in reversed(rhs): pilha.append(sim)` — **detalhe
-  crítico**: empilhamos o RHS **de trás para frente**, para que
-  o **primeiro** símbolo de α fique no topo. Isso é o que
-  implementa a derivação **leftmost** (mais à esquerda).
+> **Convenções:** topo à direita (`pop()` = topo); `$` no fundo da pilha casa com `$` no fim do buffer (aceitação). Terminal no topo → casa-e-consome. Não-terminal no topo → consulta `M[topo, token]`. **Detalhe crítico:** `reversed(rhs)` empilha o RHS de trás para frente, fazendo o **primeiro** símbolo de α ficar no topo — é isso que implementa a derivação **leftmost**.
 
-O `reversed(rhs)` garante derivação **mais à esquerda** (leftmost):
-o primeiro símbolo do RHS fica no topo da pilha e é processado primeiro.
-
-### 9.2. Exemplo passo a passo
+### 11.2. Exemplo passo a passo
 
 Para `(START) (3 4 +) (END)`:
 
@@ -1090,7 +1151,103 @@ Para `(START) (3 4 +) (END)`:
 O passo a passo completo da última execução está em
 [`output/derivacao_ultima_execucao.md`](output/derivacao_ultima_execucao.md).
 
-### 9.3. Da derivação para a AST
+### 11.3. Árvore de derivação (parse tree)
+
+Cada expansão registrada em `derivacao` corresponde a **um nó interno** de
+uma árvore. Quando o parser termina, essa árvore — chamada **árvore de
+derivação** ou *parse tree* — representa, do alto para baixo, todas as
+produções que foram aplicadas: cada nó interno é um **não-terminal** e
+cada folha é um **terminal** (ou `ε`, no caso de produção vazia).
+
+Exemplo concreto com as três primeiras linhas de [`teste1.txt`](teste1.txt):
+
+```
+(10 3 +)
+(7.5 2.5 -)
+(4 2.5 *)
+```
+
+```mermaid
+graph TD
+    PROGRAM["PROGRAM"] --> LP0["("]
+    PROGRAM --> ST["start"]
+    PROGRAM --> RP0[")"]
+    PROGRAM --> BODY1["BODY"]
+
+    BODY1 --> LP1["("]
+    BODY1 --> BT1["BODY_TAIL"]
+    BT1 --> EB1["EXPR_BODY"]
+    BT1 --> RP1[")"]
+    BT1 --> BODY2["BODY"]
+    EB1 --> I1["ITEM"]
+    EB1 --> R1["REST1"]
+    I1 --> N10["numero (10)"]
+    R1 --> I1b["ITEM"]
+    R1 --> R1b["REST2"]
+    I1b --> N3["numero (3)"]
+    R1b --> B1["BINOP"]
+    B1 --> OP1["+"]
+
+    BODY2 --> LP2["("]
+    BODY2 --> BT2["BODY_TAIL"]
+    BT2 --> EB2["EXPR_BODY"]
+    BT2 --> RP2[")"]
+    BT2 --> BODY3["BODY"]
+    EB2 --> I2["ITEM"]
+    EB2 --> R2["REST1"]
+    I2 --> N75["numero (7.5)"]
+    R2 --> I2b["ITEM"]
+    R2 --> R2b["REST2"]
+    I2b --> N25["numero (2.5)"]
+    R2b --> B2["BINOP"]
+    B2 --> OP2["-"]
+
+    BODY3 --> LP3["("]
+    BODY3 --> BT3["BODY_TAIL"]
+    BT3 --> EB3["EXPR_BODY"]
+    BT3 --> RP3[")"]
+    BT3 --> BODY4["BODY"]
+    EB3 --> I3["ITEM"]
+    EB3 --> R3["REST1"]
+    I3 --> N4["numero (4)"]
+    R3 --> I3b["ITEM"]
+    R3 --> R3b["REST2"]
+    I3b --> N25b["numero (2.5)"]
+    R3b --> B3["BINOP"]
+    B3 --> OP3["*"]
+
+    BODY4 --> LP4["("]
+    BODY4 --> BT4["BODY_TAIL"]
+    BT4 --> ED["end"]
+    BT4 --> RP4[")"]
+
+    classDef nt fill:#e0e7ff,stroke:#4338ca,color:#1e1b4b
+    classDef term fill:#fef3c7,stroke:#d97706,color:#78350f
+    class PROGRAM,BODY1,BODY2,BODY3,BODY4,BT1,BT2,BT3,BT4,EB1,EB2,EB3,I1,I1b,I2,I2b,I3,I3b,R1,R1b,R2,R2b,R3,R3b,B1,B2,B3 nt
+    class LP0,RP0,ST,LP1,RP1,LP2,RP2,LP3,RP3,LP4,RP4,ED,N10,N3,N75,N25,N4,N25b,OP1,OP2,OP3 term
+```
+
+**Como ler:**
+
+- **Caixas azuis** = não-terminais (símbolos da gramática que ainda serão expandidos);
+- **Caixas amarelas** = terminais (tokens reais consumidos do buffer de entrada).
+
+**Relação com o algoritmo da §11.1:**
+
+1. O parser começa com `PROGRAM` no topo da pilha — a **raiz** da árvore.
+2. A cada `Expande: A → α`, o nó `A` ganha como filhos exatamente os símbolos de α (mesma ordem). Isso constrói a árvore **de cima para baixo**.
+3. A cada `Casa: t`, o terminal `t` (folha amarela) é "consumido" — o parser avança 1 token. Isso é a leitura **da esquerda para a direita**.
+4. Juntando (1) + (2) + (3): a árvore inteira é construída **top-down, leftmost** — exatamente o significado de *descendente recursivo LL(1)*.
+
+> **Diferença para a AST (§12).** A árvore de derivação acima reflete a
+> **gramática concreta** (todo `(`, `)`, `REST1`, `BODY_TAIL` aparece). A
+> AST de §12 é uma versão **enxuta** — só guarda o que importa para gerar
+> Assembly: `binary(+, 10, 3)`, `binary(-, 7.5, 2.5)`, `binary(*, 4, 2.5)`.
+> A árvore de derivação completa de qualquer execução fica em
+> [`output/derivacao_ultima_execucao.md`](output/derivacao_ultima_execucao.md)
+> (formato textual com a pilha passo a passo).
+
+### 11.4. Da derivação para a AST
 
 O `parsear()` apenas **valida** a entrada e produz a lista de passos
 (`derivacao` + `passos`) usada para o relatório em
@@ -1111,9 +1268,9 @@ O pós-fixado da linguagem permite que essa segunda passada seja trivial
 
 ---
 
-## 10. A Árvore Sintática (AST)
+## 12. A Árvore Sintática (AST)
 
-### 10.1. Tipos de nó
+### 12.1. Tipos de nó
 
 | Tipo | Campos | Representa |
 |---|---|---|
@@ -1171,35 +1328,12 @@ def parse_expr() -> dict:
                 "then_block": itens[1], "else_block": itens[2]}
 ```
 
-**Lógica linha-a-linha:**
-- `esperar("(")` ... `esperar(")")` — toda expressão é cercada
-  por parênteses; consumimos os delimitadores e tratamos só o
-  conteúdo.
-- `while atual()["tipo"] != "RPAREN"` — coleta itens até o
-  fechamento. Cada `parse_item()` lê 1 token simples (número,
-  ident, keyword) **ou** chama `parse_expr()` recursivamente para
-  uma sub-expressão.
-- `len(itens) == 1` → **leitura de memória**: `(MEM)`. O único
-  item tem que ser um identificador, e o nó produzido é `mem_read`.
-- `len(itens) == 2` + segundo é `ident` → **escrita em memória**:
-  `(V MEM)`. O **primeiro** item é a sub-AST que produz o valor;
-  o **segundo** é o nome do destino.
-- `len(itens) == 2` + segundo é `keyword RES` → **referência a
-  resultado anterior**: `(N RES)`. `N` deve ser inteiro.
-- `len(itens) == 3` — três variantes possíveis, decididas pelo
-  **terceiro** item (que é sempre o "verbo" no pós-fixado):
-  - `keyword IF` → comando `if` simples (sem else).
-  - `keyword WHILE` → laço `while`.
-  - operador → expressão `binary` (`+`, `-`, `*`, `<`, `==`, …).
-- `len(itens) == 4` → única forma legal é `(C T E IFELSE)`.
-  Cond, then-block e else-block são extraídos por posição.
+> A AST é decidida pelo **número de itens** entre `(` e `)`:
+> 1 item → `mem_read` · 2 itens → `mem_write` ou `res_ref` (pelo 2º) · 3 itens → `if`/`while`/`binary` (pelo 3º) · 4 itens → `ifelse`.
+>
+> O formato pós-fixado que tornou a gramática LL(1) torna esta construção trivial: a palavra-chave/operador no **fim** da expressão é o que decide o tipo do nó.
 
-Note como o **mesmo formato pós-fixado** que tornou a gramática
-LL(1) (decidir produção por 1 lookahead) torna a construção da AST
-trivial: a palavra-chave/operador no **fim** da expressão decide o
-tipo do nó semântico.
-
-### 10.2. Estrutura em JSON
+### 12.2. Estrutura em JSON
 
 ```json
 {
@@ -1224,7 +1358,7 @@ tipo do nó semântico.
 O JSON completo da última execução está em
 [`output/arvore_ultima_execucao.json`](output/arvore_ultima_execucao.json).
 
-### 10.3. Árvore do último teste (`teste1.txt`)
+### 12.3. Árvore do último teste (`teste1.txt`)
 
 ```
 program
@@ -1289,9 +1423,111 @@ program
 
 ---
 
-## 11. Geração de Assembly
+## 13. Geração de Assembly
 
-### 11.1. Estratégia geral
+### 13.0. Referência das instruções ARMv7 utilizadas
+
+Esta seção lista **todas** as instruções emitidas pelo gerador, agrupadas por categoria, com sintaxe, semântica e onde são usadas no projeto.
+
+#### Diretivas do montador (não são instruções, configuram o arquivo)
+
+| Diretiva | Significado |
+|---|---|
+| `.syntax unified` | Usa a sintaxe ARM unificada (ARM + Thumb-2 padronizados) |
+| `.cpu cortex-a9` | Alvo é o processador Cortex-A9 (CPU do DE1-SoC) |
+| `.fpu vfpv3` | Habilita o coprocessador de ponto flutuante VFPv3 (registradores `d0`–`d31`) |
+| `.global _start` | Exporta o símbolo `_start` (ponto de entrada para o linker) |
+| `.text` | Início da seção de código executável |
+| `.data` | Início da seção de dados (constantes, memórias, resultados) |
+| `.double V` | Reserva 8 bytes contendo o `double` IEEE 754 `V` (ex.: `const_0: .double 3.14`) |
+| `.byte B, …` | Reserva bytes consecutivos (usado em `__hex_tabela`, padrões 7-segmentos) |
+
+#### Movimentação de dados (registrador ↔ registrador / imediato)
+
+| Instrução | Sintaxe | Semântica | Onde usamos |
+|---|---|---|---|
+| `MOV` | `MOV Rd, #imm` ou `MOV Rd, Rs` | `Rd ← imm` ou `Rd ← Rs` | Inicializar contadores (`MOV r3, #0`), copiar registradores em rotinas auxiliares |
+| `MOVEQ` / `MOVMI` | `MOVcc Rd, #imm` | Move **somente se** flag de condição satisfeita (EQ=igual, MI=negativo) | `__exibir_hex` (usar padrão `0x40` para sinal de menos) |
+| `LDR` | `LDR Rd, =rotulo` | `Rd ← endereço de rotulo` (carrega ponteiro para a constante/memória) | Em **toda** leitura de `.data`: `LDR r0, =const_0`, `LDR r0, =mem_vara` |
+| `LDRB` | `LDRB Rd, [Rb, Ri]` | Lê 1 **byte** do endereço `Rb + Ri` para `Rd` | `__exibir_hex` lê padrão 7-segmentos da tabela: `LDRB r3, [r1, r3]` |
+| `STR` | `STR Rs, [Rb]` | Escreve 4 bytes (`Rs`) no endereço `Rb` | `__exibir_hex` escreve no display: `STR r4, [r6]` (`r6 = 0xFF200020`) |
+
+#### Aritmética inteira
+
+| Instrução | Sintaxe | Semântica | Onde usamos |
+|---|---|---|---|
+| `ADD` | `ADD Rd, Rs, #imm` | `Rd ← Rs + imm` | Incremento de contador no laço de divisão por subtração (`__sdiv32`, `__udiv_simples`) |
+| `SUB` | `SUB Rd, Rs, #imm` | `Rd ← Rs − imm` | Decremento do expoente em `__op_pow`; subtração em divisão |
+| `MUL` | `MUL Rd, Rn, Rm` | `Rd ← Rn × Rm` | `__op_mod` calcula `quociente × divisor` |
+| `RSB` / `RSBMI` / `RSBNE` | `RSBcc Rd, Rs, #0` | **Reverse subtract**: `Rd ← 0 − Rs` (negação). Sufixo `MI`/`NE` aplica condicionalmente | `__sdiv32` e `__exibir_hex` para tratar sinal: se negativo, vira positivo |
+| `EOR` / `EORMI` | `EORcc Rd, Rs, #imm` | XOR bit-a-bit. `EORMI` aplica só se negativo | `__sdiv32` mantém o **sinal final** com XOR dos sinais dos operandos |
+| `ORR` | `ORR Rd, Rs, Rt, LSL #n` | OU bit-a-bit, com Rt deslocado `n` bits para a esquerda | `__exibir_hex` combina 4 dígitos no mesmo word: `ORR r4, r4, r3, LSL #8` |
+| `CMP` | `CMP Ra, Rb` ou `CMP Ra, #imm` | Calcula `Ra − Rb` e atualiza as **flags** (`N`, `Z`, `C`, `V`); não escreve resultado | Antes de qualquer desvio condicional |
+
+#### Desvios (branches)
+
+| Instrução | Sintaxe | Semântica | Onde usamos |
+|---|---|---|---|
+| `B` | `B rotulo` | Salto **incondicional** | Topo de loop (`B while_i_0`), pulo do ELSE após THEN, retorno ao topo de divisão por subtração |
+| `BEQ` | `BEQ rotulo` | Salta se **igual** (flag `Z=1`) | Falso ⇒ pula bloco do `IF`/`WHILE`; igualdade no operador `==` |
+| `BNE` | `BNE rotulo` | Salta se **não-igual** | Operador `!=` |
+| `BGT` / `BGE` | `BGT rotulo` | Salta se **maior** / **maior ou igual** (após `VCMP` com flags FPU copiadas) | Operadores `>` e `>=` |
+| `BLT` / `BLE` | `BLT rotulo` | Salta se **menor** / **menor ou igual** | Operadores `<` e `<=` |
+| `BL` | `BL rotulo` | **Branch and Link**: salva endereço de retorno em `lr`, depois salta. Equivale a `call` | Chama rotinas auxiliares: `BL __op_idiv`, `BL __sdiv32`, `BL __exibir_hex` |
+| `BX` | `BX lr` | **Branch and eXchange**: salta para o endereço em `lr`. Equivale a `return` | Final de **toda** sub-rotina |
+
+#### Pilha (caller-saved + return address)
+
+| Instrução | Sintaxe | Semântica | Onde usamos |
+|---|---|---|---|
+| `PUSH` | `PUSH {r4, r5}` ou `PUSH {lr}` | Empilha registradores (decremento de `sp` + escrita) | Salvar `d0` via `r4:r5`; preservar `lr` no início de cada rotina; salvar callee-saved (`r4`–`r6`) em `__exibir_hex` |
+| `POP` | `POP {r4, r5}` | Desempilha (leitura + incremento de `sp`) | Restaurar valores antes de `BX lr` |
+
+#### Coprocessador VFP (ponto flutuante de 64 bits)
+
+| Instrução | Sintaxe | Semântica | Onde usamos |
+|---|---|---|---|
+| `VLDR.F64` | `VLDR.F64 d0, [r0]` | Carrega 8 bytes do endereço em `r0` para o registrador `d0` (double) | Toda leitura de constante ou memória: imediatamente após `LDR r0, =rotulo` |
+| `VSTR.F64` | `VSTR.F64 d0, [r0]` | Escreve `d0` (8 bytes) no endereço em `r0` | `mem_write` salva resultado em `mem_VARA`; salvamento de `resultado_N` |
+| `VMOV` (64 bits) | `VMOV r4, r5, d0` ou `VMOV d0, r4, r5` | Copia os **64 bits** de `d0` para o par `r4:r5` (ou volta) | Único caminho para fazer `PUSH`/`POP` de double — VFP não tem push/pop nativo |
+| `VMOV` (32 bits) | `VMOV r0, s0` ou `VMOV s0, r0` | Copia os **32 bits** de `s0` (single) ↔ registrador genérico | Passar inteiro para `__exibir_hex`; receber resultado de `__sdiv32` de volta |
+| `VMOV.F64` | `VMOV.F64 d2, d0` | Copia `d0` → `d2` (double-to-double) | `__op_pow` salva a base em `d2` antes do laço de multiplicações |
+| `VADD.F64` | `VADD.F64 d0, d0, d1` | `d0 ← d0 + d1` (soma double) | Operador `+` |
+| `VSUB.F64` | `VSUB.F64 d0, d0, d1` | `d0 ← d0 − d1` | Operador `−` |
+| `VMUL.F64` | `VMUL.F64 d0, d0, d1` | `d0 ← d0 × d1` | Operador `*` e laço de `__op_pow` |
+| `VDIV.F64` | `VDIV.F64 d0, d0, d1` | `d0 ← d0 ÷ d1` (divisão **real**) | Operador `\|` |
+| `VCMP.F64` | `VCMP.F64 d0, d1` | Compara dois doubles, atualiza **flags do FPU** (`FPSCR`) | Toda comparação relacional + teste `cond ≠ 0` em IF/WHILE |
+| `VMRS` | `VMRS APSR_nzcv, FPSCR` | Move flags `N/Z/C/V` do FPU (`FPSCR`) para o registrador de status do CPU (`APSR`) | **Indispensável** depois de `VCMP` para que `BEQ`/`BGT`/etc. funcionem |
+| `VCVT.S32.F64` | `VCVT.S32.F64 s0, d0` | Converte double → inteiro com sinal de 32 bits (truncamento) | Antes da divisão inteira (`__op_idiv`, `__op_mod`) e antes de exibir no display |
+| `VCVT.F64.S32` | `VCVT.F64.S32 d0, s0` | Converte inteiro com sinal → double | Depois de `__op_idiv`/`__op_mod`, para devolver o resultado como double |
+
+#### Sufixos condicionais
+
+ARM permite sufixar quase qualquer instrução com um **código de condição** que faz a instrução executar apenas se as flags atuais satisfizerem o teste. Os sufixos usados no projeto:
+
+| Sufixo | Condição | Significado |
+|---|---|---|
+| `EQ` | `Z = 1` | igual |
+| `NE` | `Z = 0` | não-igual |
+| `MI` | `N = 1` | negativo (minus) |
+| `GT` / `GE` | flags de "maior" / "maior ou igual" | comparação assinada |
+| `LT` / `LE` | "menor" / "menor ou igual" | comparação assinada |
+
+Exemplos no código: `RSBMI` (negar se negativo), `MOVEQ` (mover se igual), `EORMI`, `BLE` (branch if less or equal).
+
+#### Por que esse conjunto e não outro
+
+| Decisão | Justificativa |
+|---|---|
+| **Tudo em `double` (VFPv3)** | A linguagem mistura inteiros (`10`) e reais (`3.14`); usar sempre `double` simplifica o gerador (uma representação única) e dá precisão suficiente. |
+| **`r4:r5` como ponte para PUSH/POP** | VFPv3 não tem `VPUSH`/`VPOP` no Cortex-A9 do DE1-SoC; mover para par de registradores genéricos é o caminho padrão. |
+| **`VMRS APSR_nzcv, FPSCR` após `VCMP`** | As flags da FPU ficam em `FPSCR`; sem copiar para `APSR`, `BEQ`/`BGT`/etc. (que olham `APSR`) leem flags antigas. |
+| **`__sdiv32` por subtrações sucessivas** | O Cortex-A9 do DE1-SoC **não tem** instrução `SDIV` nativa (só foi adicionada no Cortex-A15+). |
+| **Pilha de operandos (não registradores)** | RPN mapeia naturalmente para pilha; geração recursiva fica trivial — basta empilhar resultado de cada sub-expressão. |
+
+---
+
+### 13.1. Estratégia geral
 
 A geração percorre a AST **recursivamente**. Todos os valores são tratados como
 `double` IEEE 754 (64 bits) usando os registradores VFP `d0`–`d7`.
@@ -1309,7 +1545,7 @@ POP {r4, r5}
 VMOV d1, r4, r5
 ```
 
-### 11.2. Como cada nó é traduzido
+### 13.2. Como cada nó é traduzido
 
 | Nó da AST | Assembly gerado |
 |---|---|
@@ -1329,7 +1565,7 @@ VMOV d1, r4, r5
 | `ifelse` | gera cond → `BEQ else_X` → then → `B fim_X` → `else_X:` → else → `fim_X:` |
 | `while` | `loop_X:` → gera cond → `BEQ fim_X` → bloco → `B loop_X` → `fim_X:` |
 
-### 11.3. Estruturas de controle em detalhe
+### 13.3. Estruturas de controle em detalhe
 
 Esta seção mostra o ciclo completo de cada estrutura de controle: a **lógica**, o **código Python** em `_emit_*` e o **Assembly** resultante para um exemplo concreto.
 
@@ -1459,27 +1695,23 @@ def _emit_ifelse(no, linhas, ctx):
     linhas.append(f"{rotulo_fim}:")              # valor do ramo já na pilha
 ```
 
-**Assembly gerado para `(((VARA) 5 >=) (1 FLAG) (0 FLAG) IFELSE)`:**
+**Assembly gerado para `(((VARA) 5 >=) (1 FLAG) (0 FLAG) IFELSE)`** — esqueleto:
 
 ```asm
-@ --- condição: (VARA) >= 5 (idêntico ao IF acima) ---
-    ... @ avalia VARA >= 5, empilha 1.0 ou 0.0
-@ --- teste IFELSE ---
-    POP {r4, r5}
+    ...                      @ avalia VARA >= 5, empilha 1.0 ou 0.0
+    POP {r4, r5}             @ desempilha condição → d0
     VMOV d0, r4, r5
-    LDR r0, =const_zero
-    VLDR.F64 d1, [r0]
-    VCMP.F64 d0, d1
+    VCMP.F64 d0, d1          @ d1 = 0.0
     VMRS APSR_nzcv, FPSCR
-    BEQ else_2               @ falso → else
-@ --- bloco THEN: (1 FLAG) ---
-    ...                      @ FLAG ← 1.0, empilha 1.0
-    B ife_fim_2              @ pula else
+    BEQ else_2               @ falso → ELSE
+    ...                      @ THEN: FLAG ← 1.0, empilha 1.0
+    B ife_fim_2              @ pula ELSE
 else_2:
-@ --- bloco ELSE: (0 FLAG) ---
-    ...                      @ FLAG ← 0.0, empilha 0.0
+    ...                      @ ELSE: FLAG ← 0.0, empilha 0.0
 ife_fim_2:                   @ valor do ramo escolhido já está na pilha
 ```
+
+> A diferença em relação ao IF é a presença do segundo bloco e do salto incondicional `B ife_fim_2` que pula o ELSE quando o THEN é executado.
 
 ---
 
@@ -1525,78 +1757,31 @@ def _emit_while(no, linhas, ctx):
     _emit_push_d0(linhas)
 ```
 
-**Assembly gerado para `(((VARA) 0 >) (((VARA) 1 -) VARA) WHILE)`:**
+**Assembly gerado para `(((VARA) 0 >) (((VARA) 1 -) VARA) WHILE)`** — esqueleto:
 
 ```asm
-while_i_0:
-@ --- condição: (VARA) > 0 ---
-    LDR r0, =mem_vara
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}            @ empilha VARA
-    LDR r0, =const_0        @ const_0: .double 0.0
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}            @ empilha 0.0
-    POP {r4, r5}
-    VMOV d1, r4, r5          @ d1 = 0.0
-    POP {r4, r5}
-    VMOV d0, r4, r5          @ d0 = VARA
-    VCMP.F64 d0, d1
-    VMRS APSR_nzcv, FPSCR
-    BGT cmp_t_3
-    LDR r0, =const_zero
-    VLDR.F64 d0, [r0]
-    B cmp_e_3
-cmp_t_3:
-    LDR r0, =const_one
-    VLDR.F64 d0, [r0]
-cmp_e_3:
-    VMOV r4, r5, d0
-    PUSH {r4, r5}            @ empilha 1.0 (VARA > 0) ou 0.0
-@ --- teste WHILE ---
-    POP {r4, r5}
+while_i_0:                   @ ← topo do loop
+    ...                      @ avalia (VARA) > 0, empilha 1.0/0.0
+    POP {r4, r5}             @ desempilha condição
     VMOV d0, r4, r5
-    LDR r0, =const_zero
-    VLDR.F64 d1, [r0]
-    VCMP.F64 d0, d1
+    VCMP.F64 d0, d1          @ d1 = 0.0
     VMRS APSR_nzcv, FPSCR
-    BEQ while_f_0            @ VARA <= 0 → sai
-@ --- corpo: (((VARA) 1 -) VARA) → VARA ← VARA - 1 ---
-    LDR r0, =mem_vara
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}            @ empilha VARA
-    LDR r0, =const_1        @ const_1: .double 1.0
-    VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}            @ empilha 1.0
-    POP {r4, r5}
-    VMOV d1, r4, r5          @ d1 = 1.0
-    POP {r4, r5}
-    VMOV d0, r4, r5          @ d0 = VARA
-    VSUB.F64 d0, d0, d1      @ d0 = VARA - 1
-    VMOV r4, r5, d0
-    PUSH {r4, r5}            @ empilha resultado
-    POP {r4, r5}
+    BEQ while_f_0            @ falso → sai
+    ...                      @ corpo: VARA ← VARA - 1  (escreve em mem_vara!)
+    POP {r4, r5}             @ descarta resultado do corpo
     VMOV d0, r4, r5
-    LDR r0, =mem_vara
-    VSTR.F64 d0, [r0]        @ VARA ← VARA - 1  (efeito colateral!)
-    VMOV r4, r5, d0
-    PUSH {r4, r5}
-    POP {r4, r5}
-    VMOV d0, r4, r5          @ descarta resultado do corpo
-    B while_i_0              @ volta ao início
+    B while_i_0              @ volta ao topo
 while_f_0:
-    LDR r0, =const_zero
+    LDR r0, =const_zero      @ resultado neutro = 0.0
     VLDR.F64 d0, [r0]
-    VMOV r4, r5, d0
-    PUSH {r4, r5}            @ resultado neutro = 0.0
+    PUSH {r4, r5}
 ```
+
+> **Por que o corpo precisa escrever em memória?** Sem `VSTR.F64 d0, [mem_vara]` no corpo, `VARA` nunca muda e o loop é infinito. Por isso a forma correta é `(((VARA) 1 -) VARA)` (calcula `VARA-1` **e** armazena), não apenas `((VARA) 1 -)`.
 
 ---
 
-### 11.4. Rotinas auxiliares
+### 13.4. Rotinas auxiliares
 
 As operações sem instrução nativa em ARMv7 são implementadas como sub-rotinas:
 
@@ -1610,7 +1795,7 @@ As operações sem instrução nativa em ARMv7 são implementadas como sub-rotin
 
 ---
 
-## 12. Arquivos de Teste
+## 14. Arquivos de Teste
 Para validar o tratamento de erros:
 
 | Arquivo | Erros cobertos |
@@ -1633,7 +1818,7 @@ Os testes unitários em [`tests/`](tests/) cobrem:
 
 ---
 
-## 13. Tratamento de Erros
+## 15. Tratamento de Erros
 
 Toda mensagem inclui **linha** e **coluna** quando disponível:
 
@@ -1651,7 +1836,7 @@ todos os módulos, mantendo o `try/except` em `main.py` simples.
 
 ---
 
-## 14. Distribuição do Trabalho
+## 16. Distribuição do Trabalho
 
 | Aluno | Responsabilidades | Arquivos |
 |---|---|---|
@@ -1662,7 +1847,7 @@ todos os módulos, mantendo o `try/except` em `main.py` simples.
 Cada contribuição está registrada no repositório como **pull request separado**.
 
 
-## 15. Referências
+## 17. Referências
 
 ### Bibliografia
 

@@ -1,71 +1,65 @@
 # Árvore Sintática
 
-Gerada a partir de: `teste3.txt`
+Gerada a partir de: `teste1.txt`
 
 ```
 program
   binary(+)
-    number(1.25)
-    number(3.75)
+    number(10)
+    number(3)
   binary(-)
+    number(7.5)
+    number(2.5)
+  binary(*)
+    number(4)
+    number(2.5)
+  binary(|)
     number(10.0)
     number(4.0)
-  binary(*)
-    number(2.0)
-    number(3.5)
-  binary(|)
-    number(9.0)
-    number(2.0)
   binary(/)
-    number(9)
-    number(2)
+    number(10)
+    number(3)
   binary(%)
-    number(9)
-    number(2)
+    number(10)
+    number(3)
   binary(^)
     number(2)
-    number(8)
-  mem_write(PI)
-    number(3.1415)
-  binary(*)
-    mem_read(PI)
-    number(2.0)
-  res_ref(linhas_atras=1)
-  mem_write(RAIO)
-    mem_read(PI)
-  binary(*)
-    binary(*)
-      mem_read(RAIO)
-      mem_read(PI)
-    mem_read(RAIO)
-  if
-    cond:
-      binary(>)
-        mem_read(RAIO)
-        number(0.0)
-    then:
-      binary(|)
-        mem_read(RAIO)
-        number(0.5)
-  ifelse
-    cond:
-      binary(>)
-        mem_read(PI)
-        number(3.0)
-    then:
-      mem_write(MAIOR)
-        number(1)
-    else:
-      mem_write(MAIOR)
-        number(0)
+    number(5)
+  mem_write(VARA)
+    number(20)
+  binary(|)
+    mem_read(VARA)
+    number(2)
+  res_ref(linhas_atras=2)
   while
     cond:
-      binary(!=)
-        mem_read(MAIOR)
+      binary(>)
+        mem_read(VARA)
         number(0)
     body:
-      mem_write(MAIOR)
+      mem_write(VARA)
         binary(-)
-          mem_read(MAIOR)
-          number(1)
+          mem_read(VARA)
+          number(10)
+  ifelse
+    cond:
+      binary(>=)
+        mem_read(VARA)
+        number(5)
+    then:
+      mem_write(FLAG)
+        number(1)
+    else:
+      mem_write(FLAG)
+        number(0)
+  binary(==)
+    mem_read(FLAG)
+    number(0)
+  binary(-)
+    binary(+)
+      number(10)
+      number(3)
+    binary(*)
+      number(2)
+      number(4)
 ```

@@ -15,7 +15,8 @@ extensão *Markdown Preview Mermaid Support*.
 > [Sequência completa](#8-sequência-completa-de-uma-execução) ·
 > [Ponto fixo FIRST/FOLLOW](#9-firstfollow--fluxo-do-ponto-fixo) ·
 > [Tabela LL(1)](#10-construção-da-tabela-ll1--fluxo-de-decisão) ·
-> [Aridade no gerarArvore](#11-decisão-por-aridade-no-parse_expr-gerararvore)
+> [Aridade no gerarArvore](#11-decisão-por-aridade-no-parse_expr-gerararvore) ·
+> [Árvore de derivação LL(1)](#12-árvore-de-derivação-ll1-exemplo-real)
 
 ---
 
@@ -396,7 +397,119 @@ flowchart TD
 
 ---
 
-## 12. Como atualizar este documento
+## 12. Árvore de derivação LL(1) (exemplo real)
+
+A **árvore de derivação** (ou *parse tree*) mostra como o **analisador
+sintático descendente recursivo do tipo LL(1)** expande os
+não-terminais da gramática, produção a produção, até chegar nos
+terminais lidos do arquivo. Cada nó interno é um não-terminal e cada
+folha é um terminal (ou `ε`, indicando produção vazia).
+
+Exemplo abaixo: três primeiras linhas de `teste1.txt`:
+
+```
+(10 3 +)
+(7.5 2.5 -)
+(4 2.5 *)
+```
+
+Tokens: `( 10 3 + ) ( 7.5 2.5 - ) ( 4 2.5 * ) $`
+
+Produções aplicadas em ordem (extraídas de `derivacao_ultima_execucao.md`),
+referenciando os índices de `gramatica_dump.md`:
+
+| # | Produção | Por quê |
+|---|---|---|
+| 0 | `PROGRAM → BODY` | regra inicial |
+| 1 | `BODY → EXPR BODY_TAIL` | tabela `M[BODY, "("] = 1` |
+| 2 | `EXPR → ( ITEM REST1 )` | tabela `M[EXPR, "("] = 2` |
+| - | `ITEM → numero` (10) | `FIRST(numero)` |
+| - | `REST1 → ITEM REST2` | há mais tokens antes do `)` |
+| - | `ITEM → numero` (3) | idem |
+| - | `REST2 → BINOP` | `+` ∈ FIRST(BINOP) |
+| - | `BINOP → +` | terminal casado |
+| - | `BODY_TAIL → BODY` | ainda há mais `(` |
+| - | (repete para `(7.5 2.5 -)` e `(4 2.5 *)`) | |
+| - | `BODY_TAIL → ε` | `$` ∈ FOLLOW(BODY_TAIL) |
+
+```mermaid
+graph TD
+    PROGRAM["PROGRAM"] --> BODY1["BODY"]
+
+    BODY1 --> E1["EXPR"]
+    BODY1 --> BT1["BODY_TAIL"]
+
+    E1 --> P1["("]
+    E1 --> I1["ITEM"]
+    E1 --> R1["REST1"]
+    E1 --> P1c[")"]
+    I1 --> N10["numero (10)"]
+    R1 --> I1b["ITEM"]
+    R1 --> R1b["REST2"]
+    I1b --> N3["numero (3)"]
+    R1b --> B1["BINOP"]
+    B1 --> OP1["+"]
+
+    BT1 --> BODY2["BODY"]
+    BODY2 --> E2["EXPR"]
+    BODY2 --> BT2["BODY_TAIL"]
+
+    E2 --> P2["("]
+    E2 --> I2["ITEM"]
+    E2 --> R2["REST1"]
+    E2 --> P2c[")"]
+    I2 --> N75["numero (7.5)"]
+    R2 --> I2b["ITEM"]
+    R2 --> R2b["REST2"]
+    I2b --> N25["numero (2.5)"]
+    R2b --> B2["BINOP"]
+    B2 --> OP2["-"]
+
+    BT2 --> BODY3["BODY"]
+    BODY3 --> E3["EXPR"]
+    BODY3 --> BT3["BODY_TAIL"]
+
+    E3 --> P3["("]
+    E3 --> I3["ITEM"]
+    E3 --> R3["REST1"]
+    E3 --> P3c[")"]
+    I3 --> N4["numero (4)"]
+    R3 --> I3b["ITEM"]
+    R3 --> R3b["REST2"]
+    I3b --> N25b["numero (2.5)"]
+    R3b --> B3["BINOP"]
+    B3 --> OP3["*"]
+
+    BT3 --> EPS["ε"]
+
+    classDef nt fill:#e0e7ff,stroke:#4338ca,color:#1e1b4b
+    classDef term fill:#fef3c7,stroke:#d97706,color:#78350f
+    classDef eps fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    class PROGRAM,BODY1,BODY2,BODY3,BT1,BT2,BT3,E1,E2,E3,I1,I1b,I2,I2b,I3,I3b,R1,R1b,R2,R2b,R3,R3b,B1,B2,B3 nt
+    class P1,P1c,P2,P2c,P3,P3c,N10,N3,N75,N25,N4,N25b,OP1,OP2,OP3 term
+    class EPS eps
+```
+
+**Como ler:**
+
+- **Caixas azuis** = não-terminais (símbolos da gramática);
+- **Caixas amarelas** = terminais (tokens reais consumidos do buffer);
+- **Caixa vermelha (`ε`)** = produção vazia (regra de fechamento de `BODY_TAIL` quando o próximo token é `$`).
+
+**Relação com o algoritmo LL(1):**
+
+1. O parser começa com a pilha `['$', 'PROGRAM']` (raiz da árvore acima).
+2. A cada passo, o **topo da pilha** é um não-terminal: o parser olha o próximo token (lookahead de 1) e consulta `M[topo, token]` para decidir **qual filho criar** — isso corresponde a expandir um nó da árvore.
+3. Quando o topo é terminal e casa com o token, a folha amarela é "fechada" (token consumido).
+4. A árvore é construída **de cima para baixo, da esquerda para a direita** — exatamente o significado de *descendente recursivo LL(1)*.
+
+> Para uma derivação completa de qualquer execução, abra
+> `output/derivacao_ultima_execucao.md` (gerado a cada `python main.py …`).
+> Cada linha lá corresponde a uma expansão de não-terminal — i.e., a um nó interno desta árvore.
+
+---
+
+## 13. Como atualizar este documento
 
 
 Sempre que a gramática, o parser ou a AST mudarem:

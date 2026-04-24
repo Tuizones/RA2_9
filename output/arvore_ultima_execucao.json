@@ -6,16 +6,40 @@
       "op": "+",
       "esq": {
         "tipo": "number",
-        "valor": "1.25"
+        "valor": "10"
       },
       "dir": {
         "tipo": "number",
-        "valor": "3.75"
+        "valor": "3"
       }
     },
     {
       "tipo": "binary",
       "op": "-",
+      "esq": {
+        "tipo": "number",
+        "valor": "7.5"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "2.5"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "*",
+      "esq": {
+        "tipo": "number",
+        "valor": "4"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "2.5"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "|",
       "esq": {
         "tipo": "number",
         "valor": "10.0"
@@ -27,38 +51,14 @@
     },
     {
       "tipo": "binary",
-      "op": "*",
-      "esq": {
-        "tipo": "number",
-        "valor": "2.0"
-      },
-      "dir": {
-        "tipo": "number",
-        "valor": "3.5"
-      }
-    },
-    {
-      "tipo": "binary",
-      "op": "|",
-      "esq": {
-        "tipo": "number",
-        "valor": "9.0"
-      },
-      "dir": {
-        "tipo": "number",
-        "valor": "2.0"
-      }
-    },
-    {
-      "tipo": "binary",
       "op": "/",
       "esq": {
         "tipo": "number",
-        "valor": "9"
+        "valor": "10"
       },
       "dir": {
         "tipo": "number",
-        "valor": "2"
+        "valor": "3"
       }
     },
     {
@@ -66,11 +66,11 @@
       "op": "%",
       "esq": {
         "tipo": "number",
-        "valor": "9"
+        "valor": "10"
       },
       "dir": {
         "tipo": "number",
-        "valor": "2"
+        "valor": "3"
       }
     },
     {
@@ -82,127 +82,41 @@
       },
       "dir": {
         "tipo": "number",
-        "valor": "8"
+        "valor": "5"
       }
     },
     {
       "tipo": "mem_write",
-      "nome": "PI",
+      "nome": "VARA",
       "valor": {
         "tipo": "number",
-        "valor": "3.1415"
+        "valor": "20"
       }
     },
     {
       "tipo": "binary",
-      "op": "*",
+      "op": "|",
       "esq": {
         "tipo": "mem_read",
-        "nome": "PI"
+        "nome": "VARA"
       },
       "dir": {
         "tipo": "number",
-        "valor": "2.0"
+        "valor": "2"
       }
     },
     {
       "tipo": "res_ref",
-      "linhas_atras": 1
-    },
-    {
-      "tipo": "mem_write",
-      "nome": "RAIO",
-      "valor": {
-        "tipo": "mem_read",
-        "nome": "PI"
-      }
-    },
-    {
-      "tipo": "binary",
-      "op": "*",
-      "esq": {
-        "tipo": "binary",
-        "op": "*",
-        "esq": {
-          "tipo": "mem_read",
-          "nome": "RAIO"
-        },
-        "dir": {
-          "tipo": "mem_read",
-          "nome": "PI"
-        }
-      },
-      "dir": {
-        "tipo": "mem_read",
-        "nome": "RAIO"
-      }
-    },
-    {
-      "tipo": "if",
-      "cond": {
-        "tipo": "binary",
-        "op": ">",
-        "esq": {
-          "tipo": "mem_read",
-          "nome": "RAIO"
-        },
-        "dir": {
-          "tipo": "number",
-          "valor": "0.0"
-        }
-      },
-      "then_block": {
-        "tipo": "binary",
-        "op": "|",
-        "esq": {
-          "tipo": "mem_read",
-          "nome": "RAIO"
-        },
-        "dir": {
-          "tipo": "number",
-          "valor": "0.5"
-        }
-      }
-    },
-    {
-      "tipo": "ifelse",
-      "cond": {
-        "tipo": "binary",
-        "op": ">",
-        "esq": {
-          "tipo": "mem_read",
-          "nome": "PI"
-        },
-        "dir": {
-          "tipo": "number",
-          "valor": "3.0"
-        }
-      },
-      "then_block": {
-        "tipo": "mem_write",
-        "nome": "MAIOR",
-        "valor": {
-          "tipo": "number",
-          "valor": "1"
-        }
-      },
-      "else_block": {
-        "tipo": "mem_write",
-        "nome": "MAIOR",
-        "valor": {
-          "tipo": "number",
-          "valor": "0"
-        }
-      }
+      "linhas_atras": 2
     },
     {
       "tipo": "while",
       "cond": {
         "tipo": "binary",
-        "op": "!=",
+        "op": ">",
         "esq": {
           "tipo": "mem_read",
-          "nome": "MAIOR"
+          "nome": "VARA"
         },
         "dir": {
           "tipo": "number",
@@ -211,18 +125,89 @@
       },
       "body": {
         "tipo": "mem_write",
-        "nome": "MAIOR",
+        "nome": "VARA",
         "valor": {
           "tipo": "binary",
           "op": "-",
           "esq": {
             "tipo": "mem_read",
-            "nome": "MAIOR"
+            "nome": "VARA"
           },
           "dir": {
             "tipo": "number",
-            "valor": "1"
+            "valor": "10"
           }
+        }
+      }
+    },
+    {
+      "tipo": "ifelse",
+      "cond": {
+        "tipo": "binary",
+        "op": ">=",
+        "esq": {
+          "tipo": "mem_read",
+          "nome": "VARA"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "5"
+        }
+      },
+      "then_block": {
+        "tipo": "mem_write",
+        "nome": "FLAG",
+        "valor": {
+          "tipo": "number",
+          "valor": "1"
+        }
+      },
+      "else_block": {
+        "tipo": "mem_write",
+        "nome": "FLAG",
+        "valor": {
+          "tipo": "number",
+          "valor": "0"
+        }
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "==",
+      "esq": {
+        "tipo": "mem_read",
+        "nome": "FLAG"
+      },
+      "dir": {
+        "tipo": "number",
+        "valor": "0"
+      }
+    },
+    {
+      "tipo": "binary",
+      "op": "-",
+      "esq": {
+        "tipo": "binary",
+        "op": "+",
+        "esq": {
+          "tipo": "number",
+          "valor": "10"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "3"
+        }
+      },
+      "dir": {
+        "tipo": "binary",
+        "op": "*",
+        "esq": {
+          "tipo": "number",
+          "valor": "2"
+        },
+        "dir": {
+          "tipo": "number",
+          "valor": "4"
         }
       }
     }

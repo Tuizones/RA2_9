@@ -195,7 +195,7 @@ def executar_fase2(
     caminho_arvore: str,
 ) -> dict:
     # Orquestrador: chama todas as etapas em ordem e retorna tudo num dict.
-    # Esse dict é usado pelo main.py para salvar os artefatos e exibir resultados.
+    # Esse dict é usado pelo AnalisadorSintatico.py para salvar os artefatos e exibir resultados.
     # 1) leitura do fonte
     linhas: list[str] = []
     lerArquivo(caminho_fonte, linhas)

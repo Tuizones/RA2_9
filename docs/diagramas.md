@@ -22,7 +22,7 @@ extensão *Markdown Preview Mermaid Support*.
 
 ## 1. Pipeline end-to-end (fluxograma)
 
-Visão macro do que acontece ao executar `python main.py teste1.txt`.
+Visão macro do que acontece ao executar `python AnalisadorSintatico.py teste1.txt`.
 
 ```mermaid
 flowchart LR
@@ -54,7 +54,7 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph CLI
-        main["main.py"]
+        main["AnalisadorSintatico.py"]
     end
 
     subgraph src
@@ -265,20 +265,20 @@ classDiagram
 ## 8. Sequência completa de uma execução
 
 Interação entre os principais módulos quando o usuário roda
-`python main.py teste1.txt`.
+`python AnalisadorSintatico.py teste1.txt`.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor U as Usuário
-    participant M as main.py
+    participant M as AnalisadorSintatico.py
     participant P as pipeline.py
     participant L as lexer_fsm.py
     participant G as parser_ll1.py
     participant A as armv7_generator.py
     participant FS as Sistema de arquivos
 
-    U->>M: python main.py teste1.txt
+    U->>M: python AnalisadorSintatico.py teste1.txt
     M->>P: executar_fase2(...)
     P->>FS: lerArquivo("teste1.txt")
     FS-->>P: linhas[]
@@ -504,7 +504,7 @@ graph TD
 4. A árvore é construída **de cima para baixo, da esquerda para a direita** — exatamente o significado de *descendente recursivo LL(1)*.
 
 > Para uma derivação completa de qualquer execução, abra
-> `output/derivacao_ultima_execucao.md` (gerado a cada `python main.py …`).
+> `output/derivacao_ultima_execucao.md` (gerado a cada `python AnalisadorSintatico.py …`).
 > Cada linha lá corresponde a uma expansão de não-terminal — i.e., a um nó interno desta árvore.
 
 ---
@@ -515,6 +515,6 @@ graph TD
 Sempre que a gramática, o parser ou a AST mudarem:
 
 1. Atualize o(s) diagrama(s) afetado(s) neste arquivo.
-2. Rode `python main.py teste1.txt` para regenerar todos os artefatos em `output/`
+2. Rode `python AnalisadorSintatico.py teste1.txt` para regenerar todos os artefatos em `output/`
    (inclui `gramatica_dump.md`, `derivacao_ultima_execucao.md`, `arvore_ultima_execucao.json/.md`).
 3. Rode `python -m pytest tests/ -q` para garantir que os 37 testes continuam passando.

@@ -3,7 +3,7 @@
 # rejeitadas pelo parser, com mensagem indicando linha/coluna.
 #
 # Cada linha abaixo isoladamente provoca um erro sintático. Para rodar:
-#   python main.py teste_erro_sintatico.txt
+#   python AnalisadorSintatico.py teste_erro_sintatico.txt
 #
 # (Comente todas as outras linhas e deixe apenas a que quiser testar.)
 (START)

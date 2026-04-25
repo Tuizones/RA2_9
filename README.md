@@ -70,7 +70,7 @@ Pilha: [ "(" start ")" BODY $ ]
 
 ## 2. Pipeline end-to-end
 
-Tudo que acontece ao rodar `python main.py teste1.txt`:
+Tudo que acontece ao rodar `python AnalisadorSintatico.py teste1.txt`:
 
 ```mermaid
 flowchart LR
@@ -114,7 +114,7 @@ flowchart LR
 
 ```
 .
-├── main.py                              # Ponto de entrada (CLI)
+├── AnalisadorSintatico.py               # Ponto de entrada (CLI)
 ├── README.md                            # Este arquivo
 ├── gramatica.md                         # Gramática formal (EBNF estendido)
 ├── docs/
@@ -233,7 +233,7 @@ preserva o padrão RPN da linguagem e permite decisão com **1 símbolo de looka
 ### 5.2. Executar o analisador
 
 ```bash
-python main.py teste1.txt
+python AnalisadorSintatico.py teste1.txt
 ```
 
 Saída no console:
@@ -270,7 +270,7 @@ Assembly gerado em    : output/ultima_execucao.s
 ### 5.4. Argumentos opcionais
 
 ```bash
-python main.py teste2.txt \
+python AnalisadorSintatico.py teste2.txt \
   --out output/teste2.s \
   --tokens-out output/tokens_t2.txt \
   --arvore-out output/arvore_t2.json \
@@ -1805,8 +1805,8 @@ Para validar o tratamento de erros:
 | [`teste_erro_sintatico.txt`](teste_erro_sintatico.txt) | `(3 2 + 5)`, `(+ 3 2)`, `(IF 3 2)`, parênteses extras, `(1 RES MEM)` |
 
 ```bash
-python main.py teste_erro_lexico.txt     # aborta na primeira linha problemática
-python main.py teste_erro_sintatico.txt
+python AnalisadorSintatico.py teste_erro_lexico.txt     # aborta na primeira linha problemática
+python AnalisadorSintatico.py teste_erro_sintatico.txt
 ```
 
 Os testes unitários em [`tests/`](tests/) cobrem:
@@ -1833,7 +1833,7 @@ Toda mensagem inclui **linha** e **coluna** quando disponível:
 | Semântico | `Comando (MEM) exige identificador em letras maiúsculas` |
 
 A classe `Erros` (em [`src/lexer_fsm.py`](src/lexer_fsm.py)) é compartilhada por
-todos os módulos, mantendo o `try/except` em `main.py` simples.
+todos os módulos, mantendo o `try/except` em `AnalisadorSintatico.py` simples.
 
 ---
 
@@ -1843,7 +1843,7 @@ todos os módulos, mantendo o `try/except` em `main.py` simples.
 |---|---|---|
 | **Frederico** (fredfruet) | `construirGramatica`, FIRST/FOLLOW, tabela LL(1), `parsear` | [`src/parser_ll1.py`](src/parser_ll1.py), [`gramatica.md`](gramatica.md), [`tests/test_pipeline.py`](tests/test_pipeline.py) |
 | **Emanuel** (emanuelriceto) | `lerTokens`, novas keywords e relacionais no AFD, testes léxicos | [`src/lexer_fsm.py`](src/lexer_fsm.py), [`src/pipeline.py`](src/pipeline.py), [`tests/test_lexer.py`](tests/test_lexer.py) |
-| **Arthur** (Tuizones) | `gerarArvore`, `gerarAssembly`, `main`, integração end-to-end | [`main.py`](main.py), [`src/armv7_generator.py`](src/armv7_generator.py) |
+| **Arthur** (Tuizones) | `gerarArvore`, `gerarAssembly`, `main`, integração end-to-end | [`AnalisadorSintatico.py`](AnalisadorSintatico.py), [`src/armv7_generator.py`](src/armv7_generator.py) |
 
 Cada contribuição está registrada no repositório como **pull request separado**.
 

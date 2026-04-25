@@ -3,7 +3,7 @@
 # demonstrar o tratamento de erros do AFD (Fase 1 reaproveitado).
 #
 # Cada linha abaixo isoladamente provoca um erro léxico. Para rodar:
-#   python main.py teste_erro_lexico.txt
+#   python AnalisadorSintatico.py teste_erro_lexico.txt
 #
 # (Comente todas as outras linhas e deixe apenas a que quiser testar.)
 (START)

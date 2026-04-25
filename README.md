@@ -504,7 +504,7 @@ poderia ter dado zero (`(START)(END)`) ou várias.
 > a ser parseado, esses lexemas continuam sendo escritos em **MAIÚSCULAS**
 > (ex.: `(START)`, `(IF …)`) — a tabela em [§ 1.3 de `gramatica.md`](gramatica.md#13-mapeamento-literal--s%C3%ADmbolo-interno)
 > faz o mapeamento `lexema MAIÚSCULO ↔ terminal minúsculo` que o
-> [`_token_para_terminal`](src/parser_ll1.py) implementa.
+> [`_token_para_terminal`](src/parser_ll1.py) implementa no github <https://github.com/Tuizones/RA2_9/>
 
 > **Por que ainda precisamos da BNF da § 7.2.** EBNF é ótima para
 > humanos mas a tabela LL(1) só sabe consultar regras no formato
@@ -1192,6 +1192,7 @@ graph TD
     BODY2 --> BT2["BODY_TAIL"]
     BT2 --> EB2["EXPR_BODY"]
     BT2 --> RP2[")"]
+    E-F-A 
     BT2 --> BODY3["BODY"]
     EB2 --> I2["ITEM"]
     EB2 --> R2["REST1"]
@@ -1584,7 +1585,7 @@ Esta seção mostra o ciclo completo de cada estrutura de controle: a **lógica*
 [if_fim_0]:  empilha 0.0 (resultado padronizado)
 ```
 
-**Código Python (`src/armv7_generator.py`):**
+**Código Python (`src/armv7_generator.py`):** do grupo 9 
 
 ```python
 def _emit_if(no, linhas, ctx):

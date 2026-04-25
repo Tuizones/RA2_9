@@ -8,7 +8,7 @@
 # Professor: Frank Coelho de Alcantara
 
 # Ponto de entrada do programa (Fase 2 — Analisador Sintático LL(1)).
-# Uso: python main.py <arquivo.txt>
+# Uso: python AnalisadorSintatico.py <arquivo.txt>
 #
 # O fluxo completo que acontece quando você roda o programa:
 #   1) lerArquivo        -> abre o .txt e lê linha por linha
